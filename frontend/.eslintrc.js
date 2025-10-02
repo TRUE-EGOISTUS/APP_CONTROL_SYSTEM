@@ -1,19 +1,15 @@
-module.exports = {
+odule.exports = {
   root: true,
   env: {
-    node: true
+    node: true,
   },
-  'extends': [
+  extends: [
     'plugin:vue/vue3-essential',
-    'eslint:recommended'
+    'eslint:recommended',
   ],
   parserOptions: {
     parser: '@babel/eslint-parser',
-    requireConfigFile: false, // Отключаем проверку наличия babel.config.js
+    requireConfigFile: false,
     sourceType: 'module',
   },
-  rules: {
-    'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
-    'no-debugger': process.env.NODE_ENV === 'production' ? 'warn' : 'off'
-  }
-}
+};

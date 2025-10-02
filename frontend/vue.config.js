@@ -1,3 +1,4 @@
+
 const { defineConfig } = require('@vue/cli-service');
 
 module.exports = defineConfig({
@@ -11,8 +12,14 @@ module.exports = defineConfig({
       .loader('babel-loader')
       .tap(options => ({
         ...options,
-        sourceType: 'module', // Явно указываем ES-модули
+        sourceType: 'unambiguous', // Автоматическое определение типа модуля
       }));
+
+    // Исключаем webpack-dev-server из обработки Babel
+    config.module
+      .rule('js')
+      .exclude.add(/node_modules\/webpack-dev-server/)
+      .end();
 
     // Настройка для .vue файлов
     config.module
@@ -20,8 +27,5 @@ module.exports = defineConfig({
       .test(/\.vue$/)
       .use('vue-loader')
       .loader('vue-loader');
-
-    // Убедимся, что Webpack использует ES-модули
-    config.output.module(true);
   },
 });

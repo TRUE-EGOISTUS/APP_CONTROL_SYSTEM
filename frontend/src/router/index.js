@@ -1,16 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
-// Определяем маршруты
 const routes = [
   {
-    path: '/', // URL для главной страницы
+    path: '/',
     name: 'HomePage',
-    component: () => import('../views/HomePage.vue'), // Ссылаемся на HomePage.vue
+    component: () => import('../views/HomePage.vue'),
   },
 ];
 
 const router = createRouter({
-  history: createWebHistory(), // Используем history mode
+  history: createWebHistory(),
   routes,
 });
 

@@ -3,6 +3,7 @@ const { defineConfig } = require('@vue/cli-service');
 module.exports = defineConfig({
   transpileDependencies: true,
   chainWebpack: (config) => {
+    // Настройка для .js файлов
     config.module
       .rule('js')
       .test(/\.js$/)
@@ -10,13 +11,17 @@ module.exports = defineConfig({
       .loader('babel-loader')
       .tap(options => ({
         ...options,
-        sourceType: 'module',
+        sourceType: 'module', // Явно указываем ES-модули
       }));
 
+    // Настройка для .vue файлов
     config.module
       .rule('vue')
       .test(/\.vue$/)
       .use('vue-loader')
       .loader('vue-loader');
+
+    // Убедимся, что Webpack использует ES-модули
+    config.output.module(true);
   },
 });

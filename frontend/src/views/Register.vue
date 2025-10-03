@@ -59,15 +59,6 @@ export default {
             this.emailError = '';
             this.passwordError = '';
             this.confirmPasswordError = '';
-
-              // Отладка: выводим значения в консоль
-              console.log('Email:', this.email, 'Type:', typeof this.email);
-              console.log('Password:', this.password, 'Type:', typeof this.password, 'Length:', this.password.length);
-              console.log('Confirm Password:', this.confirmPassword, 'Type:', typeof this.confirmPassword, 'Length:', this.confirmPassword.length);
-
-              // Отладка: выводим коды символов для выявления скрытых символов
-              console.log('Password char codes:', Array.from(this.password).map(c => c.charCodeAt(0)));
-              console.log('Confirm Password char codes:', Array.from(this.confirmPassword).map(c => c.charCodeAt(0)));
             
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(this.email)) {

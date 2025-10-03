@@ -4,17 +4,17 @@
     <form @submit.prevent="register">
         <div class="mb-3">
             <label for="email" class="form-label">Логин</label>
-            <input type="email" class="form-control" :class="{'is-invalid': emailError}" id="email" v-model="email" placeholder="Введите логин" required/>
+            <input type="email" class="form-control" :class="{'is-invalid': emailError}" id="email" v-model.trim="email" placeholder="Введите логин" required/>
         <div v-if="emailError" class="invalid-feedback">{{emailError}}</div>
         </div>
          <div class="mb-3">
             <label for="password" class="form-label">Пароль</label>
-            <input type="password" class="form-control" :class="{'is-invalid': passwordError}" id="password" v-model="password" placeholder="Введите пароль (мин. 6 символов)" required/>
+            <input type="password" class="form-control" :class="{'is-invalid': passwordError}" id="password" v-model.trim="password" placeholder="Введите пароль (мин. 6 символов)" required/>
         <div v-if="passwordError" class="invalid-feedback">{{passwordError}}</div>
         </div>
           <div class="mb-3">
             <label for="confirmPassword" class="form-label">Потверждение пароля</label>
-            <input type="password" class="form-control" :class="{'is-invalid': confirmPasswordError}" id="confirmPassword" v-model="confirmPassword" placeholder="Повторите пароль" required/>
+            <input type="password" class="form-control" :class="{'is-invalid': confirmPasswordError}" id="confirmPassword" v-model.trim="confirmPassword" placeholder="Повторите пароль" required/>
         <div v-if="confirmPasswordError" class="invalid-feedback">{{confirmPasswordError}}</div>
         </div>
         <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
@@ -30,6 +30,7 @@ export default {
         return {
             email: '',
             password: '',
+            confirmPassword: '',
             emailError: '',
             passwordError: '',
             confirmPasswordError: '',
@@ -41,6 +42,11 @@ export default {
             this.passwordError = '';
             this.confirmPasswordError = '';
 
+            // Отладка: выводим значения в консоль
+            console.log('Email:', this.email);
+            console.log('Password:', this.password);
+            console.log('Confirm Password:', this.confirmPassword);
+            
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(this.email)) {
                 this.emailError = 'Некорректный формат email'
@@ -51,7 +57,7 @@ export default {
                 return false;
             }
             if (this.password != this.comfirmPassword) {
-                this.confirmPasswordError ='Пароли не совпадают';
+                this.confirmPasswordError ='Пароли не совпадают', this.password, 'vs', this.confirmPassword;
                 return false;
             }
             return true;

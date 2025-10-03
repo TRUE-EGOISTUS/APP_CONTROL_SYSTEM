@@ -32,10 +32,10 @@ export default {
                     email: this.email,
                     password: this.password
                 });
-                alert('Успешная регистрация: ${response.data.message}');
+                alert('Успешная регистрация: ' + response.data.message);
                 this.$router.push('/login');
             } catch (error) {
-                alert("Ошибка регистрации: ${error.response?.data?.message || 'Ошибка сервера'}");
+                alert('Ошибка регистрации: ' + (error.response?.data?.message || 'Ошибка сервера'));
             }
         }
     },

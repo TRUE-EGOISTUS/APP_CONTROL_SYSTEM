@@ -46,11 +46,14 @@ export default {
             return true;
         },
         async login(){
+            if (!this.validateForm()) {
+                return;
+            }
             try {
                 const response = await axios.post('http://localhost:3000/api/login',{
                     email: this.email,
                     password: this.password,
-                });
+                }, {withCredentials: true}); // Отправка cookies
                 alert('Успешный вход: ' + response.data.message);
                 this.$router.push('/');
             } catch (error) {

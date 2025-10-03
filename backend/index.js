@@ -31,5 +31,5 @@ if (err) {
 });
 // Запускаем сервер
 app.listen(port, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
+  console.log(`Сервер запущен на http://localhost:${port}`);
 });

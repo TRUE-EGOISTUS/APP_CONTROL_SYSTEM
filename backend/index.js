@@ -4,6 +4,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt')
 const app = express();
 const port = 3000;
+
 // Подключаемся к SQLite
 const db = new sqlite3.Database('./database.db', (err) =>{
 if (err) {
@@ -87,7 +88,7 @@ app.post('/api/register',(req,res) => {
         console.error('Ошибка хеширования пароля:', err.message);
         return res.status(500).json({message:'Ошибка сервера'});
       }
-    });
+    
     db.run('INSERT INTO Users (email, password) VALUES (?, ?)', [email, hashedPassword], function(err){
       if (err) {
         console.error('Ошибка регистрации: ', err.message);
@@ -95,6 +96,7 @@ app.post('/api/register',(req,res) => {
       } else {
         res.json({message: 'Успешная регистрация', userId: this.lastID});
       }
+      });
     });
 });
 // Запускаем сервер

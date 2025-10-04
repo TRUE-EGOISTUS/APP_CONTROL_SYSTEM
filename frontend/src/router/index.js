@@ -39,14 +39,20 @@ const router = createRouter({
   routes,
 });
 router.beforeEach(async (to, from, next) => {
+  console.log('Router: Переход на:', to.path);
   if (to.meta.requiresAuth) {
     try {
-      await axios.get('http://localhost:3000/api/profile', { withCredentials: true });
+      console.log('Router: Проверка авторизации для', to.path);
+      const response = await axios.get('http://localhost:3000/api/profile', { withCredentials: true });
+      console.log('Router: Проверка авторизации успешна:', response.data);
       next();
     } catch (error) {
+      console.error('Router: Ошибка проверки авторизации:', error.response?.data || error.message);
+      console.log('Router: Перенаправление на /login');
       next('/login');
     }
   } else {
+    console.log('Router: Доступ без авторизации к', to.path);
     next();
   }
 });

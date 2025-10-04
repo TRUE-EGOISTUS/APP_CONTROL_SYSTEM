@@ -73,7 +73,7 @@ export default {
                     password: this.password,
                 }, {withCredentials: true}); // Отправка cookies
                 alert('Успешный вход: ' + response.data.message);
-                this.$router.push('/');
+                this.$router.push('/projects');
             } catch (error) {
                 alert('Ошибка входа: ' + (error.response?.data?.message || 'Сервер не отвечает'));
             }

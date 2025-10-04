@@ -76,7 +76,7 @@ db.run(`
   });
 });
 
-app.use(cors({credentials: true, origin:'http://localhost:8080'}));
+app.use(cors({credentials: true, origin:'http://localhost:8080', methods:['GET', 'POST', 'OPTIONS'], allowedHeaders:['Content-Type', 'Cookie']}));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -93,15 +93,19 @@ const validateInput = (email,password) =>{
 
 const authentificateSession = (req, res, next) =>{
   const sessionId = req.cookies.sessionId;
+  console.log('Проверка сессии:', {sessionId, cookies: req.cookies});  
+  
   if (!sessionId) {
     return res.status(401).json({message: 'Сессия не найдена'});
   }
+  
   db.get('SELECT * FROM Sessions WHERE sessionId = ? AND expires > ?', [sessionId, Date.now()], (err, session) => {
     if (err) {
       console.error('Ошибка проверки сессии:', err.message);
       return res.status(500).json({message: 'Ошибка сервера'});
     }
     if (!session) {
+      console.log('Сессия недействительна или истекла:', {sessionId});
       return res.status(401).json({message: 'Сессия недействительна или истекла'});
     }
 
@@ -111,8 +115,10 @@ const authentificateSession = (req, res, next) =>{
       return res.status(500).json({message: 'Ошибка сервера'});      
     }
     if (!user) {
+      console.log('Пользователь не найден:', {userId: session.userId});
       return res.status(401).json({message:'Пользователь на найден'});
     }
+    console.log('Пользователь аутентифицирован:', user);
     req.user = user;
     next();
    }); 
@@ -153,9 +159,11 @@ app.post('/api/login', (req,res) => {
             console.error('Ошибка создания сессии:', err.message);
             return res.status(500).json({message:'Ошибка сервера'});
           }
+          console.log('Cессия создана:', {sessionId, userId: row.id, expires});
           res.cookie('sessionId',sessionId,{
             httpOnly: true,
             secure: false,
+            sameSite: 'lax',
             maxAge: 3600 * 1000
           });
           res.json({message: 'Успешный вход', userId: row.id});
@@ -193,6 +201,7 @@ app.post('/api/register',(req,res) => {
 });
 
 app.get('/api/profile', authentificateSession, (req, res) => {
+  console.log('Доступ к профилю:', req.user);
   res.json({message: 'Доступ к профилю разрешён', user: req.user});
 });
 

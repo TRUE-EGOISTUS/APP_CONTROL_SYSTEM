@@ -13,30 +13,33 @@
         <div v-if="emailError" 
         class="invalid-feedback">{{emailError}}</div>
         </div>
-         <div class="mb-3 position-relative">
+         <div class="mb-3">
             <label for="password" 
             class="form-label">Пароль</label>
+            <div class="input-group">
             <input :type="showPassword ? 'text': 'password' " 
             class="form-control" 
             :class="{'is-invalid': passwordError}" 
             id="password" 
             v-model.trim="password" 
             placeholder="Введите пароль (мин. 6 символов)" required/>
-            <button type="button" class="btn btn-outline-secondary position-absolute end-0 top-50 translate-middle-y" @click="togglePassword">
+            <button type="button" class="btn btn-outline-secondary" @click="togglePassword">
                 <i class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
             </button>
         <div v-if="passwordError" class="invalid-feedback">{{passwordError}}</div>
         </div>
-          <div class="mb-3 position-relative">
+    </div>
+          <div class="mb-3">
             <label for="confirmPassword" 
             class="form-label">Потверждение пароля</label>
+            <div class="input-group"></div>
             <input :type="showConfirmPassword ? 'text' :'password'" 
             class="form-control" 
             :class="{'is-invalid': confirmPasswordError}" 
             id="confirmPassword" 
             v-model.trim="confirmPassword" 
             placeholder="Повторите пароль" required/>
-            <button type="button" class="btn btn-outline-secondary position-absolute end-0 top-50 translate-middle-y" @click="toggleConfirmPassword">
+            <button type="button" class="btn btn-outline-secondary" @click="toggleConfirmPassword">
                  <i class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
             </button>
         <div v-if="confirmPasswordError" class="invalid-feedback">{{confirmPasswordError}}</div>
@@ -115,9 +118,10 @@ export default {
     max-width: 400px;
     margin:auto;
 }
-.position-relative{
-    height: 38px;
-    line-height: 38px;
-    padding: 0 12px;
+.input-group .btn{
+    width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 </style>

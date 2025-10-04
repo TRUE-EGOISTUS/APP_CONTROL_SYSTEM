@@ -4,6 +4,7 @@ import Login from '../views/Login.vue';
 import Register from '../views/Register.vue';
 import Profile from '../views/Profile.vue';
 import Projects from '../views/Projects.vue';
+import axios  from 'axios';
 const routes = [
   {
     path: '/',

@@ -7,12 +7,27 @@
             <input type="email" class="form-control" :class="{'is-invalid': emailError}" id="email" v-model="email" placeholder="Введите логин" required >
         <div v-if="emailError" class="invalid-feedback">{{emailError}}</div>
         </div>
-        <div class="mb-3">
-            <label for="password" class="form-label">Пароль</label>
-            <input type="password" class="form-control" :class="{'is-invalid': passwordError}" id="password" v-model="password" placeholder="Введите пароль (мин. 6 символов)" required >
-        <div v-if="passwordError" class="invalid-feedback">{{passwordError}}</div>
-        </div>
-        <button type="submit" class="btn btn-primary">Войти</button>
+           <div class="mb-3 position-relative">
+        <label for="password" class="form-label">Пароль</label>
+        <input
+          :type="showPassword ? 'text' : 'password'"
+          class="form-control"
+          :class="{ 'is-invalid': passwordError }"
+          id="password"
+          v-model.trim="password"
+          placeholder="Введите пароль (мин. 6 символов)"
+          required
+        />
+        <button
+          type="button"
+          class="btn btn-outline-secondary position-absolute end-0 top-50 translate-middle-y"
+          @click="togglePassword"
+        >
+          <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+        </button>
+        <div v-if="passwordError" class="invalid-feedback">{{ passwordError }}</div>
+      </div>
+      <button type="submit" class="btn btn-primary">Войти</button>
     </form>
   </div>
 </template>
@@ -27,6 +42,7 @@ export default {
             password: '',
             emailError: '',
             passwordError:'',
+            showPassword: false
         };
     },
     methods: {
@@ -59,14 +75,22 @@ export default {
             } catch (error) {
                 alert('Ошибка входа: ' + (error.response?.data?.message || 'Сервер не отвечает'));
             }
+        },
+        togglePassword(){
+            this.showPassword = !this.showPassword;
         }
-    },
-}
+    }
+};
 </script>
 
 <style scoped>
 .container {
   max-width: 400px;
   margin-top: 60px;
+}
+.position-relative{
+    height: 38px;
+    line-height: 38px;
+    padding: 0 12px;
 }
 </style>

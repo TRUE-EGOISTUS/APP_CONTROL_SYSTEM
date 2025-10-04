@@ -36,7 +36,7 @@
           <div class="mb-3">
             <label for="confirmPassword" 
             class="form-label">Потверждение пароля</label>
-            <div class="input-group"></div>
+            <div class="input-group">
             <input :type="showConfirmPassword ? 'text' :'password'" 
             class="form-control" 
             :class="{'is-invalid': confirmPasswordError}" 
@@ -48,6 +48,7 @@
             </button>
         <div v-if="confirmPasswordError" class="invalid-feedback">{{confirmPasswordError}}</div>
         </div>
+    </div>
         <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
     </form>
   </div>

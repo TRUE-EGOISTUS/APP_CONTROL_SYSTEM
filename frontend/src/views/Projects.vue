@@ -1,4 +1,3 @@
-```vue
 <template>
   <div class="container mt-5">
     <h2>Проекты и дефекты</h2>
@@ -211,4 +210,3 @@ export default {
   margin-top: 20px;
 }
 </style>
-```

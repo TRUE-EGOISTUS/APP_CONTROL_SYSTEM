@@ -41,6 +41,39 @@ db.run(`
       console.log('Таблица Sessions создана или уже существует.');
     }
   });
+   db.run(`
+    CREATE TABLE IF NOT EXISTS Projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      createdAt INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      FOREIGN KEY (userId) REFERENCES Users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error('Ошибка создания таблицы Projects:', err.message);
+    } else {
+      console.log('Таблица Projects создана или уже существует.');
+    }
+  });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS Defects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      projectId INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      FOREIGN KEY (projectId) REFERENCES Projects(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error('Ошибка создания таблицы Defects:', err.message);
+    } else {
+      console.log('Таблица Defects создана или уже существует.');
+    }
+  });
 });
 
 app.use(cors({credentials: true, origin:'http://localhost:8080'}));
@@ -176,6 +209,85 @@ app.post('/api/logout', (req, res)=>{
   res.clearCookie('sessionId');
   res.json({message: 'Выход выполнен'});
 });
+
+app.post('/api/projects', authentificateSession, (req, res) =>{
+  const {name, description} = req.body;
+  if (!name) {
+    return res.status(400).json({message: 'Название проекта обязательно'});
+  }
+  db.run(
+    'INSERT INTO Projects (name, description, createdAt, userId) VALUES (?, ?, ?, ?)', [name,description || '', Date.now(), req.user.id],
+    function (err) {
+      if (err) {
+        console.error('Ошибка создания проекта:', err.message);
+        return res.status(500).json({message: 'Ошибка сервера'});
+      }      
+      res.json({message: 'Проект создан', projectId: this.lastID});
+    }
+  );
+});
+
+app.get('/api/projects', authentificateSession, (req,res) => {
+  db.all('SELECT id, name, description, createdAt FROM Projects WHERE userId = ?', [req.user.id], (err,rows) =>{
+    if (err) {
+      console.error('Ошибка получения проектов:', err.message);
+      return res.status(500).json({message: 'Ошибка сервера'});
+    }
+    res.json({projects: rows});
+  });
+});
+
+app.post('/api/defects', authentificateSession, (req,res) => {
+  const {projectId,description,status}= req.body;
+  if (!projectId || !description || !status) {
+    return res.status(400).json({message: 'Все поля (projectId, description, status) обязательны'}); 
+  }  
+  if(!['open','closed'].includes(status)){
+    return res.status(400).json({message: 'Статус должен быть "open" или "closed"'});
+  }
+  db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [projectId, req.user.id], (err,project) => {
+    if (err) {
+      console.error('Ошибка проверки проекта:', err.message);
+      return res.status(500).json({message: 'Ошибка сервера'});
+    }
+    if (!project) {
+      return res.status(400).json({message: 'Проект не найден или не принадлежит пользователю'});
+    }
+    db.run('INSERT INTO Defects (projectId, description, status, createdAt) VALUES (?, ?, ?, ?)', [projectId,description,status,Date.now()],
+      function (err) {
+        if (err) {
+          console.error('Ошибка создания дефекта:', err.message);
+          return res.status(500).json({message: 'Ошибка сервера'});
+        }
+        res.json({message: 'Дефект создан', defectId: this.lastID});
+      }
+    );
+  });
+});
+
+app.get('/api/defects', authentificateSession, (req,res) => {
+  const {projectId} = req.query;
+  if (!projectId) {
+    return res.status(400).json({message: 'Не указан projectId'});
+  }
+   db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [projectId, req.user.id], (err, project) => {
+    if (err) {
+      console.error('Ошибка проверки проекта:', err.message);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    if (!project) {
+      return res.status(400).json({ message: 'Проект не найден или не принадлежит пользователю' });
+    }
+
+    db.all('SELECT id, projectId, description, status, createdAt FROM Defects WHERE projectId = ?', [projectId], (err, rows) => {
+      if (err) {
+        console.error('Ошибка получения дефектов:', err.message);
+        return res.status(500).json({ message: 'Ошибка сервера' });
+      }
+      res.json({ defects: rows });
+    });
+  });
+})
 // Запускаем сервер
 app.listen(port, () => {
   console.log(`Сервер запущен на http://localhost:${port}`);

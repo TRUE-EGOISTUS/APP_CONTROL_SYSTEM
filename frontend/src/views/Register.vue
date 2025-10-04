@@ -14,17 +14,21 @@
         class="invalid-feedback">{{emailError}}</div>
         </div>
          <div class="mb-3">
-            <label for="password" 
-            class="form-label">Пароль</label>
+            <label for="password" class="form-label">Пароль</label>
             <div class="input-group">
-            <input :type="showPassword ? 'text': 'password' " 
+            <input 
+            :type="showPassword ? 'text': 'password' " 
             class="form-control" 
             :class="{'is-invalid': passwordError}" 
             id="password" 
             v-model.trim="password" 
-            placeholder="Введите пароль (мин. 6 символов)" required/>
-            <button type="button" class="btn btn-outline-secondary" @click="togglePassword">
-                <i class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+            placeholder="Введите пароль (мин. 6 символов)" 
+            required/>
+            <button type="button"
+            class="btn btn-outline-secondary" 
+            @click="togglePassword"
+            >
+            <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
             </button>
         <div v-if="passwordError" class="invalid-feedback">{{passwordError}}</div>
         </div>
@@ -40,7 +44,7 @@
             v-model.trim="confirmPassword" 
             placeholder="Повторите пароль" required/>
             <button type="button" class="btn btn-outline-secondary" @click="toggleConfirmPassword">
-                 <i class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                 <i :class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
             </button>
         <div v-if="confirmPasswordError" class="invalid-feedback">{{confirmPasswordError}}</div>
         </div>
@@ -116,7 +120,7 @@ export default {
 <style scoped>
 .container{
     max-width: 400px;
-    margin:auto;
+    margin-top: 60px;
 }
 .input-group .btn{
     width: 40px;

@@ -1,6 +1,9 @@
+```vue
 <template>
   <div class="container mt-5">
     <h2>Проекты и дефекты</h2>
+
+    <!-- Форма создания проекта -->
     <h3>Создать проект</h3>
     <form @submit.prevent="createProject">
       <div class="mb-3">
@@ -8,13 +11,11 @@
         <input
           type="text"
           class="form-control"
-          :class="{ 'is-invalid': projectNameError }"
           id="projectName"
           v-model.trim="projectName"
           placeholder="Введите название проекта"
           required
         />
-        <div v-if="projectNameError" class="invalid-feedback">{{ projectNameError }}</div>
       </div>
       <div class="mb-3">
         <label for="projectDescription" class="form-label">Описание проекта</label>
@@ -27,7 +28,9 @@
       </div>
       <button type="submit" class="btn btn-primary mb-4">Создать проект</button>
     </form>
-     <div v-if="editingProject">
+
+    <!-- Форма редактирования проекта -->
+    <div v-if="editingProject">
       <h3>Редактировать проект #{{ editingProject.id }}</h3>
       <form @submit.prevent="updateProject">
         <div class="mb-3">
@@ -35,13 +38,11 @@
           <input
             type="text"
             class="form-control"
-            :class="{ 'is-invalid': editProjectNameError }"
             id="editProjectName"
             v-model.trim="editProjectName"
             placeholder="Введите название проекта"
             required
           />
-          <div v-if="editProjectNameError" class="invalid-feedback">{{ editProjectNameError }}</div>
         </div>
         <div class="mb-3">
           <label for="editProjectDescription" class="form-label">Описание проекта</label>
@@ -57,6 +58,7 @@
       </form>
     </div>
 
+    <!-- Список проектов -->
     <h3>Ваши проекты</h3>
     <div v-if="projects.length > 0">
       <table class="table table-bordered">
@@ -86,6 +88,7 @@
       <p>У вас пока нет проектов.</p>
     </div>
 
+    <!-- Форма создания дефекта -->
     <div v-if="selectedProjectId !== null">
       <h3>Добавить дефект для проекта #{{ selectedProjectId }}</h3>
       <form @submit.prevent="createDefect">
@@ -93,13 +96,11 @@
           <label for="defectDescription" class="form-label">Описание дефекта</label>
           <textarea
             class="form-control"
-            :class="{ 'is-invalid': defectDescriptionError }"
             id="defectDescription"
             v-model.trim="defectDescription"
             placeholder="Введите описание дефекта"
             required
           ></textarea>
-          <div v-if="defectDescriptionError" class="invalid-feedback">{{ defectDescriptionError }}</div>
         </div>
         <div class="mb-3">
           <label for="defectStatus" class="form-label">Статус</label>
@@ -116,20 +117,19 @@
         <button type="submit" class="btn btn-primary mb-4">Добавить дефект</button>
       </form>
 
-        <div v-if="editingDefect">
+      <!-- Форма редактирования дефекта -->
+      <div v-if="editingDefect">
         <h3>Редактировать дефект #{{ editingDefect.id }}</h3>
         <form @submit.prevent="updateDefect">
           <div class="mb-3">
             <label for="editDefectDescription" class="form-label">Описание дефекта</label>
             <textarea
               class="form-control"
-              :class="{ 'is-invalid': editDefectDescriptionError }"
               id="editDefectDescription"
               v-model.trim="editDefectDescription"
               placeholder="Введите описание дефекта"
               required
             ></textarea>
-            <div v-if="editDefectDescriptionError" class="invalid-feedback">{{ editDefectDescriptionError }}</div>
           </div>
           <div class="mb-3">
             <label for="editDefectStatus" class="form-label">Статус</label>
@@ -148,6 +148,7 @@
         </form>
       </div>
 
+      <!-- Список дефектов -->
       <h3>Дефекты проекта #{{ selectedProjectId }}</h3>
       <div v-if="defects.length > 0">
         <table class="table table-bordered">
@@ -156,6 +157,7 @@
               <th>Описание</th>
               <th>Статус</th>
               <th>Дата создания</th>
+              <th>Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -164,8 +166,8 @@
               <td>{{ defect.status === 'open' ? 'Открыт' : 'Закрыт' }}</td>
               <td>{{ new Date(defect.createdAt).toLocaleDateString() }}</td>
               <td>
-                <button class="btn btn-sm btn-warning me-2" @click="startEditProject(defect)">Редактировать</button>
-                <button class="btn btn-sm btn-danger" @click="deleteProject(defect.id)">Удалить</button>              
+                <button class="btn btn-sm btn-warning me-2" @click="startEditDefect(defect)">Редактировать</button>
+                <button class="btn btn-sm btn-danger" @click="deleteDefect(defect.id)">Удалить</button>
               </td>
             </tr>
           </tbody>
@@ -187,18 +189,14 @@ export default {
     return {
       projectName: '',
       projectDescription: '',
-      projectNameError: '',
       editProjectName: '',
       editProjectDescription: '',
-      editProjectNameError: '',
       editingProject: null,
       selectedProjectId: null,
       defectDescription: '',
       defectStatus: 'open',
-      defectDescriptionError: '',
       editDefectDescription: '',
       editDefectStatus: 'open',
-      editDefectDescriptionError: '',
       editingDefect: null,
       projects: [],
       defects: []
@@ -206,12 +204,6 @@ export default {
   },
   methods: {
     async createProject() {
-      this.projectNameError = '';
-      if (!this.projectName) {
-        this.projectNameError = 'Название проекта обязательно';
-        return;
-      }
-
       try {
         const response = await axios.post('http://localhost:3000/api/projects', {
           name: this.projectName,
@@ -234,42 +226,38 @@ export default {
         this.$router.push('/login');
       }
     },
-    startEditProject(project){
-        this.editingProject = project;
-        this.editProjectName = project.name;
-        this.editProjectDescription = project.description || ''; 
+    startEditProject(project) {
+      console.log('Начало редактирования проекта:', project);
+      this.editingProject = project;
+      this.editProjectName = project.name;
+      this.editProjectDescription = project.description || '';
     },
-    async updateProject(){
-        this.editProjectNameError = '';
-        if (!this.editProjectName) {
-            this.editProjectNameError = 'Название проекта обязательно';
-            return;
-        }
-        try {
-            const response = await axios.put('http://localhost:3000/api/projects/${this.editingProject.id}', {
-                name: this.editProjectName,
-                description: this.editProjectDescription
-            },{withCredentials:true});
-            alert('Проект обновлён: ${response.data.message}');
-            this.editingProject = null;
-            this.editProjectName = '';
-            this.editDefectDescription = '';
-            this.fetchProjects();
-        } catch (error) {
-            alert(`Ошибка обновления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
-        }
+    async updateProject() {
+      try {
+        console.log('Редактирование проекта:', { id: this.editingProject.id, name: this.editProjectName, description: this.editProjectDescription });
+        const response = await axios.put(`http://localhost:3000/api/projects/${this.editingProject.id}`, {
+          name: this.editProjectName,
+          description: this.editProjectDescription
+        }, { withCredentials: true });
+        alert(`Проект обновлён: ${response.data.message}`);
+        this.editingProject = null;
+        this.editProjectName = '';
+        this.editProjectDescription = '';
+        this.fetchProjects();
+      } catch (error) {
+        console.error('Ошибка обновления проекта:', error.response?.data || error.message);
+        alert(`Ошибка обновления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
+      }
     },
-     cancelEditProject() {
+    cancelEditProject() {
       this.editingProject = null;
       this.editProjectName = '';
       this.editProjectDescription = '';
-      this.editProjectNameError = '';
     },
     async deleteProject(projectId) {
       if (!confirm('Вы уверены, что хотите удалить проект? Все связанные дефекты будут удалены.')) {
         return;
       }
-
       try {
         const response = await axios.delete(`http://localhost:3000/api/projects/${projectId}`, { withCredentials: true });
         alert(`Проект удалён: ${response.data.message}`);
@@ -287,15 +275,10 @@ export default {
       this.defects = [];
       this.defectDescription = '';
       this.defectStatus = 'open';
+      this.editingDefect = null;
       await this.fetchDefects();
     },
     async createDefect() {
-      this.defectDescriptionError = '';
-      if (!this.defectDescription) {
-        this.defectDescriptionError = 'Описание дефекта обязательно';
-        return;
-      }
-
       try {
         const response = await axios.post('http://localhost:3000/api/defects', {
           projectId: this.selectedProjectId,
@@ -319,21 +302,16 @@ export default {
       } catch (error) {
         alert(`Ошибка загрузки дефектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
-    }
-  },
-   startEditDefect(defect) {
+    },
+    startEditDefect(defect) {
+      console.log('Начало редактирования дефекта:', defect);
       this.editingDefect = defect;
       this.editDefectDescription = defect.description;
       this.editDefectStatus = defect.status;
     },
     async updateDefect() {
-      this.editDefectDescriptionError = '';
-      if (!this.editDefectDescription) {
-        this.editDefectDescriptionError = 'Описание дефекта обязательно';
-        return;
-      }
-
       try {
+        console.log('Редактирование дефекта:', { id: this.editingDefect.id, description: this.editDefectDescription, status: this.editDefectStatus });
         const response = await axios.put(`http://localhost:3000/api/defects/${this.editingDefect.id}`, {
           description: this.editDefectDescription,
           status: this.editDefectStatus
@@ -344,6 +322,7 @@ export default {
         this.editDefectStatus = 'open';
         this.fetchDefects();
       } catch (error) {
+        console.error('Ошибка обновления дефекта:', error.response?.data || error.message);
         alert(`Ошибка обновления дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
     },
@@ -351,13 +330,11 @@ export default {
       this.editingDefect = null;
       this.editDefectDescription = '';
       this.editDefectStatus = 'open';
-      this.editDefectDescriptionError = '';
     },
-    async deleteDefect(defectId){
-    if (!confirm('Вы уверены, что хотите удалить дефект?')) {
+    async deleteDefect(defectId) {
+      if (!confirm('Вы уверены, что хотите удалить дефект?')) {
         return;
-    }
-     
+      }
       try {
         const response = await axios.delete(`http://localhost:3000/api/defects/${defectId}`, { withCredentials: true });
         alert(`Дефект удалён: ${response.data.message}`);
@@ -365,7 +342,8 @@ export default {
       } catch (error) {
         alert(`Ошибка удаления дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
-    },
+    }
+  },
   mounted() {
     this.fetchProjects();
   }
@@ -381,3 +359,4 @@ export default {
   margin-top: 20px;
 }
 </style>
+```

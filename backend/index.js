@@ -76,7 +76,7 @@ db.run(`
   });
 });
 
-app.use(cors({credentials: true, origin:'http://localhost:8080', methods:['GET', 'POST', 'OPTIONS'], allowedHeaders:['Content-Type', 'Cookie']}));
+app.use(cors({credentials: true, origin:'http://localhost:8080', methods:['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders:['Content-Type', 'Cookie']}));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -246,10 +246,63 @@ app.get('/api/projects', authentificateSession, (req,res) => {
   });
 });
 
+app.put('/api/projects/:id', authentificateSession, (req, res) => {
+  const {id} = req.params;
+  const {name, description} = req.body;
+  if (!name) {
+    return res.status(400).json({message :'Название проекта обязательно'});
+  }
+  db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [id, req.user.id], (err,project) => {
+    if (err) {
+      console.error('Ошибка проверки проекта:', err.message);
+      return res.status(500).json({ message: 'Ошибка сервера'});
+    }
+    if (!project) {
+      return res.status(400).json({message: 'Проект не найден или не принадлежит пользователю'});
+    }
+
+    db.run('UPDATE Projects SET name = ?, description = ?, createdAt = ? WHERE id = ?', [name, description || '', Date.now(), id], (err) => {
+      if (err) {
+        console.error('Ошибка обновления проекта', err.message);
+        return res.status(500).json({message: 'Ошибка сервера'});
+      }
+      res.json({message: 'Проект обновлён'});
+    });
+  });
+});
+
+app.delete('/api/projects/:id', authentificateSession, (req,res) =>{
+ const {id} = req.params;
+
+ db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [id, req.user.id], (err, project) =>{
+  if (err) {
+    console.error('Ошибка проверки проекта:', err.message);
+    return res.status(500).json({message: 'Ошибка сервера'});
+  }
+  if (!project) {
+    return res.status(400).json({message: 'Проект не найден или не принадлежит пользователю'});
+  }
+
+  db.run('DELETE FROM Defects WHERE projectId = ?', [id], (err) =>{
+    if (err) {
+      console.error('Ошибка удаления дефектов:', err.message);
+      return res.status(500).json({message: 'Ошибка сервера'});
+    }
+    db.run('DELETE FROM Projects WHERE id = ?', [id], (err) =>{
+      if (err) {
+        console.error('Ошибка удаления проекта:', err.message);
+        return res.status(500).json({message: 'Ошибка сервера'});
+      }
+      res.json({message: 'Проект удалён'});
+    });
+  });
+ });
+});
+
 app.post('/api/defects', authentificateSession, (req,res) => {
   const {projectId,description,status}= req.body;
   if (!projectId || !description || !status) {
-    return res.status(400).json({message: 'Все поля (projectId, description, status) обязательны'}); 
+    return res.status(400).json({message: 'Все поля должны быть заполнены'}); 
   }  
   if(!['open','closed'].includes(status)){
     return res.status(400).json({message: 'Статус должен быть "open" или "closed"'});
@@ -296,7 +349,57 @@ app.get('/api/defects', authentificateSession, (req,res) => {
       res.json({ defects: rows });
     });
   });
-})
+});
+app.put('/api/defects/:id', authentificateSession, (req, res) =>{
+  const {id} = req.params;
+  const {description,status} = req.body;
+  if (!description || !status) {
+    return res.status(400).json({message: 'Все поля должны быть заполнены'})
+  }
+  if (!['open','closed'].includes(status)) {
+    return res.status(400).json({message: 'Статус должен быть "open" или "closed"'});
+  }
+
+  db.get('SELECT d.id, d.projectId FROM Defects d JOIN Projects p ON d.projectId = p.id WHERE d.id = ? AND p.userId = ?', [id, req.user.id], (err, defect) => {
+    if (err) {
+      console.error('Ошибка проверки дефекта:', err.message);
+      return res.status(500).json({message: 'Ошибка сервера'}); 
+    }
+    if (!defect) {
+      return res.status(400).json({ message: 'Дефект не найден или не принадлежит пользователю'});
+    }
+
+    db.run('UPDATE Defects SET description = ?, status = ?, createdAt = ? WHERE id = ?', [description, status, Date.now(), id], (err) => {
+      if (err) {
+        console.error('Ошибка обновления дефекта:', err.message);
+        return res.status(500).json({message: 'Ошибка сервера'});
+      }
+      res.json({message: 'Дефект обновлён'});
+    });
+  });
+});
+
+app.delete('/api/defects/:id', authentificateSession, (req,res) => {
+  const {id} = req.params;
+
+  db.get('SELECT d.id, d.projectId FROM Defects d JOIN Projects p ON d.projectId = p.id WHERE d.id = ? AND p.userId = ?', [id, req.user.id], (err, defect) =>{
+    if (err) {
+      console.error('Ошибка проверки дефекта', err.message);
+      return res.status(500).json({message: 'Ошибка сервера'});
+    }
+    if(!defect){
+      return res.status(400).json({message: 'Дефект не найден или не принадлежит пользователю'});
+    }
+
+    db.run('DELETE FROM Defects WHERE id = ?',[id],(err) => {
+      if (err) {
+        console.error('Ошибка удаления дефекта:', err.message);
+        return res.status(500).json({message:'Ошибка сервера'});
+      }
+      res.json({message: 'Дефект удалён'});
+    });
+  });
+});
 // Запускаем сервер
 app.listen(port, () => {
   console.log(`Сервер запущен на http://localhost:${port}`);

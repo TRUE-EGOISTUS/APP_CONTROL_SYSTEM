@@ -1,4 +1,3 @@
-```vue
 <template>
   <div class="container mt-5">
     <h2>Проекты и дефекты</h2>
@@ -170,8 +169,11 @@
             v-model="defectStatus"
             required
           >
-            <option value="open">Открыт</option>
+            <option value="new">Новый</option>
+            <option value="in_work">В работе</option>
+            <option value="on_review">На проверке</option>
             <option value="closed">Закрыт</option>
+            <option value="canceled">Отменён</option>
           </select>
         </div>
         <div class="mb-3">
@@ -244,8 +246,11 @@
               v-model="editDefectStatus"
               required
             >
-              <option value="open">Открыт</option>
+              <option value="new">Новый</option>
+              <option value="in_work">В работе</option>
+              <option value="on_review">На проверке</option>
               <option value="closed">Закрыт</option>
+              <option value="canceled">Отменён</option>
             </select>
           </div>
           <div class="mb-3">
@@ -311,7 +316,13 @@
             <tr v-for="defect in defects" :key="defect.id">
               <td>{{ defect.description }}</td>
               <td>{{ defect.priority }}</td>
-              <td>{{ defect.status === 'open' ? 'Открыт' : 'Закрыт' }}</td>
+              <td>{{ {
+                'new': 'Новый',
+                'in_work': 'В работе',
+                'on_review': 'На проверке',
+                'closed': 'Закрыт',
+                'canceled': 'Отменён'
+              }[defect.status] || defect.status }}</td>
               <td>{{ defect.assigneeEmail || '-' }}</td>
               <td>{{ defect.dueDate ? new Date(defect.dueDate).toLocaleDateString() : '-' }}</td>
               <td>{{ defect.attachments || '-' }}</td>
@@ -349,13 +360,13 @@ export default {
       selectedProjectId: null,
       defectDescription: '',
       defectPriority: 'medium',
-      defectStatus: 'open',
+      defectStatus: 'new',
       defectAssigneeId: '',
       defectDueDate: '',
       defectAttachments: '',
       editDefectDescription: '',
       editDefectPriority: 'medium',
-      editDefectStatus: 'open',
+      editDefectStatus: 'new',
       editDefectAssigneeId: '',
       editDefectDueDate: '',
       editDefectAttachments: '',
@@ -448,7 +459,7 @@ export default {
       this.defects = [];
       this.defectDescription = '';
       this.defectPriority = 'medium';
-      this.defectStatus = 'open';
+      this.defectStatus = 'new';
       this.defectAssigneeId = '';
       this.defectDueDate = '';
       this.defectAttachments = '';
@@ -469,7 +480,7 @@ export default {
         alert(`Дефект создан: ${response.data.message}`);
         this.defectDescription = '';
         this.defectPriority = 'medium';
-        this.defectStatus = 'open';
+        this.defectStatus = 'new';
         this.defectAssigneeId = '';
         this.defectDueDate = '';
         this.defectAttachments = '';
@@ -514,7 +525,7 @@ export default {
         this.editingDefect = null;
         this.editDefectDescription = '';
         this.editDefectPriority = 'medium';
-        this.editDefectStatus = 'open';
+        this.editDefectStatus = 'new';
         this.editDefectAssigneeId = '';
         this.editDefectDueDate = '';
         this.editDefectAttachments = '';
@@ -528,7 +539,7 @@ export default {
       this.editingDefect = null;
       this.editDefectDescription = '';
       this.editDefectPriority = 'medium';
-      this.editDefectStatus = 'open';
+      this.editDefectStatus = 'new';
       this.editDefectAssigneeId = '';
       this.editDefectDueDate = '';
       this.editDefectAttachments = '';
@@ -606,4 +617,3 @@ export default {
   margin-top: 20px;
 }
 </style>
-```

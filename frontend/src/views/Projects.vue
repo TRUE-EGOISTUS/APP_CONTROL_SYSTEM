@@ -1,7 +1,26 @@
 ```vue
 <template>
   <div class="container mt-5">
-    <h2>Проекты и дефекты</h2>
+    <!-- Toast для уведомлений -->
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+      <div
+        id="notificationToast"
+        class="toast"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+        data-bs-autohide="true"
+        data-bs-delay="3000"
+      >
+        <div class="toast-header" :class="toastType === 'success' ? 'bg-success text-white' : 'bg-danger text-white'">
+          <strong class="me-auto">{{ toastType === 'success' ? 'Успех' : 'Ошибка' }}</strong>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">
+          {{ toastMessage }}
+        </div>
+      </div>
+    </div>
 
     <!-- Форма создания проекта -->
     <h3>Создать проект</h3>
@@ -14,8 +33,10 @@
           id="projectName"
           v-model.trim="projectName"
           placeholder="Введите название проекта"
+          maxlength="100"
           required
         />
+        <span v-if="projectName.length > 100" class="text-danger">Максимум 100 символов</span>
       </div>
       <div class="mb-3">
         <label for="projectDescription" class="form-label">Описание проекта</label>
@@ -24,7 +45,9 @@
           id="projectDescription"
           v-model.trim="projectDescription"
           placeholder="Введите описание проекта (опционально)"
+          maxlength="500"
         ></textarea>
+        <span v-if="projectDescription.length > 500" class="text-danger">Максимум 500 символов</span>
       </div>
       <button type="submit" class="btn btn-primary mb-4">Создать проект</button>
     </form>
@@ -41,8 +64,10 @@
             id="editProjectName"
             v-model.trim="editProjectName"
             placeholder="Введите название проекта"
+            maxlength="100"
             required
           />
+          <span v-if="editProjectName.length > 100" class="text-danger">Максимум 100 символов</span>
         </div>
         <div class="mb-3">
           <label for="editProjectDescription" class="form-label">Описание проекта</label>
@@ -51,7 +76,9 @@
             id="editProjectDescription"
             v-model.trim="editProjectDescription"
             placeholder="Введите описание проекта (опционально)"
+            maxlength="500"
           ></textarea>
+          <span v-if="editProjectDescription.length > 500" class="text-danger">Максимум 500 символов</span>
         </div>
         <button type="submit" class="btn btn-success mb-4">Сохранить</button>
         <button type="button" class="btn btn-secondary mb-4 ms-2" @click="cancelEditProject">Отмена</button>
@@ -99,8 +126,10 @@
             id="defectDescription"
             v-model.trim="defectDescription"
             placeholder="Введите описание дефекта"
+            maxlength="500"
             required
           ></textarea>
+          <span v-if="defectDescription.length > 500" class="text-danger">Максимум 500 символов</span>
         </div>
         <div class="mb-3">
           <label for="defectStatus" class="form-label">Статус</label>
@@ -128,8 +157,10 @@
               id="editDefectDescription"
               v-model.trim="editDefectDescription"
               placeholder="Введите описание дефекта"
+              maxlength="500"
               required
             ></textarea>
+            <span v-if="editDefectDescription.length > 500" class="text-danger">Максимум 500 символов</span>
           </div>
           <div class="mb-3">
             <label for="editDefectStatus" class="form-label">Статус</label>
@@ -182,6 +213,7 @@
 
 <script>
 import axios from 'axios';
+import { Toast } from 'bootstrap';
 
 export default {
   name: 'Projects',
@@ -199,22 +231,35 @@ export default {
       editDefectStatus: 'open',
       editingDefect: null,
       projects: [],
-      defects: []
+      defects: [],
+      toastMessage: '',
+      toastType: 'success'
     };
   },
   methods: {
+    showToast(message, type = 'success') {
+      this.toastMessage = message;
+      this.toastType = type;
+      const toastElement = document.getElementById('notificationToast');
+      const toast = new Toast(toastElement);
+      toast.show();
+    },
     async createProject() {
+      if (this.projectName.length > 100 || (this.projectDescription && this.projectDescription.length > 500)) {
+        this.showToast('Превышена максимальная длина полей', 'error');
+        return;
+      }
       try {
         const response = await axios.post('http://localhost:3000/api/projects', {
           name: this.projectName,
           description: this.projectDescription
         }, { withCredentials: true });
-        alert(`Проект создан: ${response.data.message}`);
+        this.showToast(`Проект создан: ${response.data.message}`, 'success');
         this.projectName = '';
         this.projectDescription = '';
         this.fetchProjects();
       } catch (error) {
-        alert(`Ошибка создания проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка создания проекта: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
       }
     },
     async fetchProjects() {
@@ -222,7 +267,7 @@ export default {
         const response = await axios.get('http://localhost:3000/api/projects', { withCredentials: true });
         this.projects = response.data.projects;
       } catch (error) {
-        alert(`Ошибка загрузки проектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка загрузки проектов: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
         this.$router.push('/login');
       }
     },
@@ -233,20 +278,24 @@ export default {
       this.editProjectDescription = project.description || '';
     },
     async updateProject() {
+      if (this.editProjectName.length > 100 || (this.editProjectDescription && this.editProjectDescription.length > 500)) {
+        this.showToast('Превышена максимальная длина полей', 'error');
+        return;
+      }
       try {
         console.log('Редактирование проекта:', { id: this.editingProject.id, name: this.editProjectName, description: this.editProjectDescription });
         const response = await axios.put(`http://localhost:3000/api/projects/${this.editingProject.id}`, {
           name: this.editProjectName,
           description: this.editProjectDescription
         }, { withCredentials: true });
-        alert(`Проект обновлён: ${response.data.message}`);
+        this.showToast(`Проект обновлён: ${response.data.message}`, 'success');
         this.editingProject = null;
         this.editProjectName = '';
         this.editProjectDescription = '';
         this.fetchProjects();
       } catch (error) {
         console.error('Ошибка обновления проекта:', error.response?.data || error.message);
-        alert(`Ошибка обновления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка обновления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
       }
     },
     cancelEditProject() {
@@ -260,14 +309,14 @@ export default {
       }
       try {
         const response = await axios.delete(`http://localhost:3000/api/projects/${projectId}`, { withCredentials: true });
-        alert(`Проект удалён: ${response.data.message}`);
+        this.showToast(`Проект удалён: ${response.data.message}`, 'success');
         if (this.selectedProjectId === projectId) {
           this.selectedProjectId = null;
           this.defects = [];
         }
         this.fetchProjects();
       } catch (error) {
-        alert(`Ошибка удаления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка удаления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
       }
     },
     async selectProject(projectId) {
@@ -279,18 +328,22 @@ export default {
       await this.fetchDefects();
     },
     async createDefect() {
+      if (this.defectDescription.length > 500) {
+        this.showToast('Превышена максимальная длина описания дефекта', 'error');
+        return;
+      }
       try {
         const response = await axios.post('http://localhost:3000/api/defects', {
           projectId: this.selectedProjectId,
           description: this.defectDescription,
           status: this.defectStatus
         }, { withCredentials: true });
-        alert(`Дефект создан: ${response.data.message}`);
+        this.showToast(`Дефект создан: ${response.data.message}`, 'success');
         this.defectDescription = '';
         this.defectStatus = 'open';
         this.fetchDefects();
       } catch (error) {
-        alert(`Ошибка создания дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка создания дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
       }
     },
     async fetchDefects() {
@@ -300,7 +353,7 @@ export default {
         });
         this.defects = response.data.defects;
       } catch (error) {
-        alert(`Ошибка загрузки дефектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка загрузки дефектов: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
       }
     },
     startEditDefect(defect) {
@@ -310,20 +363,24 @@ export default {
       this.editDefectStatus = defect.status;
     },
     async updateDefect() {
+      if (this.editDefectDescription.length > 500) {
+        this.showToast('Превышена максимальная длина описания дефекта', 'error');
+        return;
+      }
       try {
         console.log('Редактирование дефекта:', { id: this.editingDefect.id, description: this.editDefectDescription, status: this.editDefectStatus });
         const response = await axios.put(`http://localhost:3000/api/defects/${this.editingDefect.id}`, {
           description: this.editDefectDescription,
           status: this.editDefectStatus
         }, { withCredentials: true });
-        alert(`Дефект обновлён: ${response.data.message}`);
+        this.showToast(`Дефект обновлён: ${response.data.message}`, 'success');
         this.editingDefect = null;
         this.editDefectDescription = '';
         this.editDefectStatus = 'open';
         this.fetchDefects();
       } catch (error) {
         console.error('Ошибка обновления дефекта:', error.response?.data || error.message);
-        alert(`Ошибка обновления дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка обновления дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
       }
     },
     cancelEditDefect() {
@@ -337,10 +394,10 @@ export default {
       }
       try {
         const response = await axios.delete(`http://localhost:3000/api/defects/${defectId}`, { withCredentials: true });
-        alert(`Дефект удалён: ${response.data.message}`);
+        this.showToast(`Дефект удалён: ${response.data.message}`, 'success');
         this.fetchDefects();
       } catch (error) {
-        alert(`Ошибка удаления дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.showToast(`Ошибка удаления дефекта: ${error.response?.data?.message || 'Ошибка сервера'}`, 'error');
       }
     }
   },
@@ -357,6 +414,9 @@ export default {
 }
 .table {
   margin-top: 20px;
+}
+.text-danger {
+  font-size: 0.9em;
 }
 </style>
 ```

@@ -43,7 +43,12 @@
             }[defect.status] || defect.status }}</td>
             <td>{{ defect.assigneeEmail || '-' }}</td>
             <td>{{ defect.dueDate ? new Date(defect.dueDate).toLocaleDateString() : '-' }}</td>
-            <td>{{ defect.attachments || '-' }}</td>
+            <td>
+              <div v-if="defect.attachments && defect.attachments.length > 0" class="attachments">
+                <button class="btn btn-sm btn-secondary" @click="downloadAll(defect.id)">Скачать все</button>
+              </div>
+              <span v-else>-</span>
+            </td>
             <td>{{ new Date(defect.createdAt).toLocaleDateString() }}</td>
             <td>
               <button class="btn btn-sm btn-warning me-2" @click="startEditDefect(defect)">Редактировать</button>
@@ -64,7 +69,7 @@
       :isProject="false"
       :users="users"
       :onSubmit="handleSubmit"
-      :initialData="editingDefect ? { ...editingDefect, dueDate: editingDefect.dueDate ? new Date(editingDefect.dueDate).toISOString().split('T')[0] : '', attachments: editingDefect.attachments ? editingDefect.attachments.join(', ') : '' } : null"
+      :initialData="editingDefect ? { ...editingDefect, dueDate: editingDefect.dueDate ? new Date(editingDefect.dueDate).toISOString().split('T')[0] : '', attachments: editingDefect.attachments || [] } : null"
     />
   </div>
 </template>
@@ -104,16 +109,19 @@ export default {
       this.testClick('edit');
     },
     async createDefect(data) {
+      const formData = new FormData();
+      formData.append('projectId', this.$route.params.projectId);
+      formData.append('description', data.description);
+      formData.append('priority', data.priority);
+      formData.append('status', data.status);
+      formData.append('assigneeId', data.assigneeId || null);
+      formData.append('dueDate', data.dueDate ? new Date(data.dueDate).getTime() : null);
+      data.attachments.forEach(file => formData.append('attachments', file));
       try {
-        const response = await axios.post('http://localhost:3000/api/defects', {
-          projectId: this.$route.params.projectId,
-          description: data.description,
-          priority: data.priority,
-          status: data.status,
-          assigneeId: data.assigneeId || null,
-          dueDate: data.dueDate ? new Date(data.dueDate).getTime() : null,
-          attachments: data.attachments ? data.attachments.split(',').map(url => url.trim()) : null
-        }, { withCredentials: true });
+        const response = await axios.post('http://localhost:3000/api/defects', formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
         alert(`Дефект создан: ${response.data.message}`);
         this.fetchDefects();
       } catch (error) {
@@ -121,15 +129,18 @@ export default {
       }
     },
     async updateDefect(data) {
+      const formData = new FormData();
+      formData.append('description', data.description);
+      formData.append('priority', data.priority);
+      formData.append('status', data.status);
+      formData.append('assigneeId', data.assigneeId || null);
+      formData.append('dueDate', data.dueDate ? new Date(data.dueDate).getTime() : null);
+      data.attachments.forEach(file => formData.append('attachments', file));
       try {
-        const response = await axios.put(`http://localhost:3000/api/defects/${this.editingDefect.id}`, {
-          description: data.description,
-          priority: data.priority,
-          status: data.status,
-          assigneeId: data.assigneeId || null,
-          dueDate: data.dueDate ? new Date(data.dueDate).getTime() : null,
-          attachments: data.attachments ? data.attachments.split(',').map(url => url.trim()) : null
-        }, { withCredentials: true });
+        const response = await axios.put(`http://localhost:3000/api/defects/${this.editingDefect.id}`, formData, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
         alert(`Дефект обновлён: ${response.data.message}`);
         this.editingDefect = null;
         this.fetchDefects();
@@ -184,6 +195,24 @@ export default {
         console.error('Ошибка загрузки пользователей:', error);
       }
     },
+    async downloadAll(defectId) {
+      try {
+        const response = await axios.get(`http://localhost:3000/api/download/attachments/${defectId}`, {
+          withCredentials: true,
+          responseType: 'blob'
+        });
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `attachments_${defectId}.zip`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        alert(`Ошибка скачивания: ${error.response?.data?.message || 'Ошибка сервера'}`);
+      }
+    },
     handleSubmit(data) {
       if (this.isEditing) {
         this.updateDefect(data);
@@ -209,5 +238,10 @@ export default {
 }
 .table {
   margin-top: 20px;
+}
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 </style>

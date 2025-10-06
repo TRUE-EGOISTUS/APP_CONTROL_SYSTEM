@@ -130,7 +130,15 @@ export default {
       }
     },
     goToDefects(projectId) {
-      this.$router.push({ path: `/defects/${projectId}` });
+      // Убедимся, что projectId — число
+      const id = parseInt(projectId, 10);
+      if (isNaN(id)) {
+        console.error('Invalid projectId:', projectId);
+        alert('Ошибка: некорректный ID проекта');
+        return;
+      }
+      console.log('Переход к дефектам проекта ID:', id);
+      this.$router.push({ path: `/defects/${id}` });
     },
     async exportProjects(format) {
       try {

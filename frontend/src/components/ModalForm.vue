@@ -87,14 +87,26 @@
           />
         </div>
         <div v-if="!isProject" class="mb-3">
-          <label for="attachments" class="form-label">Вложения (URL)</label>
+          <label for="attachments" class="form-label">Вложения (выберите файлы)</label>
           <input
-            type="text"
+            type="file"
             class="form-control"
             id="attachments"
-            v-model="formData.attachments"
-            placeholder="Введите URL через запятую (например, file1.jpg, file2.pdf)"
+            multiple
+            @change="handleFileUpload"
           />
+          <div v-if="previewFiles.length > 0" class="mt-2">
+            <p>Предпросмотр загруженных файлов:</p>
+            <div class="preview-container">
+              <div v-for="(file, index) in previewFiles" :key="index" class="preview-item">
+                <img v-if="file.type.startsWith('image/')" :src="file.url" alt="Preview" class="preview-image" />
+                <div v-else>
+                  <p>{{ file.name }} ({{ file.size }} байт)</p>
+                  <p>Тип: {{ file.type || 'Неизвестно' }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <button type="submit" class="btn btn-success">Сохранить</button>
         <button type="button" class="btn btn-secondary ms-2" @click="closeModal">Отмена</button>
@@ -125,9 +137,10 @@ export default {
         priority: 'medium',
         assigneeId: '',
         dueDate: '',
-        attachments: '',
+        attachments: [],
         closedAt: ''
-      }
+      },
+      previewFiles: []
     };
   },
   watch: {
@@ -135,6 +148,16 @@ export default {
       console.log('value в ModalForm изменилось на:', newVal);
       if (newVal && this.initialData) {
         this.formData = { ...this.initialData };
+        // Преобразуем attachments из строки в массив, если это строка
+        this.formData.attachments = Array.isArray(this.initialData.attachments)
+          ? this.initialData.attachments
+          : (this.initialData.attachments || '').split(',').map(url => url.trim()).filter(url => url);
+        this.previewFiles = this.formData.attachments.map(url => ({
+          name: url.split('/').pop() || 'Файл',
+          size: 0,
+          type: url.endsWith('.jpg') || url.endsWith('.png') ? 'image/jpeg' : 'application/octet-stream',
+          url: url
+        }));
       } else if (!newVal) {
         this.formData = {
           name: '',
@@ -143,18 +166,46 @@ export default {
           priority: 'medium',
           assigneeId: '',
           dueDate: '',
-          attachments: '',
+          attachments: [],
           closedAt: ''
         };
+        this.previewFiles = [];
       }
     },
     initialData(newVal) {
       if (newVal && this.value) {
         this.formData = { ...newVal };
+        // Преобразуем attachments из строки в массив, если это строка
+        this.formData.attachments = Array.isArray(newVal.attachments)
+          ? newVal.attachments
+          : (newVal.attachments || '').split(',').map(url => url.trim()).filter(url => url);
+        this.previewFiles = this.formData.attachments.map(url => ({
+          name: url.split('/').pop() || 'Файл',
+          size: 0,
+          type: url.endsWith('.jpg') || url.endsWith('.png') ? 'image/jpeg' : 'application/octet-stream',
+          url: url
+        }));
       }
     }
   },
   methods: {
+    handleFileUpload(event) {
+      const files = event.target.files;
+      this.formData.attachments = Array.from(files);
+      this.previewFiles = [];
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.previewFiles.push({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            url: e.target.result
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    },
     submitForm() {
       this.onSubmit(this.formData);
       this.closeModal();
@@ -222,6 +273,22 @@ button {
 .btn-secondary {
   background: #6c757d;
   color: white;
+}
+
+.preview-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+}
+
+.preview-item p {
+  margin: 0;
+}
+
+.preview-image {
+  max-width: 100px;
+  max-height: 100px;
+  object-fit: cover;
 }
 
 @keyframes fadeIn {

@@ -6,7 +6,6 @@ import Profile from '../views/Profile.vue';
 import Projects from '../views/Projects.vue';
 import Defects from '../views/Defects.vue';
 import axios  from 'axios';
-import { meta } from '@babel/eslint-parser';
 const routes = [
   {
     path: '/',

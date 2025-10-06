@@ -99,12 +99,15 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
+// Настройка multer для сохранения оригинального имени файла
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname); // Уникальное имя файла
+    // Сохраняем оригинальное имя файла с уникальным префиксом
+    const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `${uniquePrefix}-${file.originalname}`);
   }
 });
 const upload = multer({ storage });
@@ -372,8 +375,10 @@ app.post('/api/defects', authenticateSession, upload.array('attachments', 10), (
       return res.status(400).json({ message: 'Проект не найден или не принадлежит пользователю' });
     }
 
-    const attachments = req.files.map(file => `/uploads/${file.filename}`); // Формируем URL
+    // Логируем загруженные файлы для отладки
+    console.log('Загруженные файлы:', req.files);
 
+    const attachments = req.files.map(file => `/uploads/${file.filename}`);
     db.run(
       'INSERT INTO Defects (projectId, description, priority, status, assigneeId, dueDate, attachments, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [projectId, description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, JSON.stringify(attachments), Date.now()],
@@ -446,8 +451,10 @@ app.put('/api/defects/:id', authenticateSession, upload.array('attachments', 10)
       return res.status(400).json({ message: 'Дефект не найден или не принадлежит пользователю' });
     }
 
-    const attachments = req.files.map(file => `/uploads/${file.filename}`); // Формируем URL
+    // Логируем загруженные файлы для отладки
+    console.log('Загруженные файлы при обновлении:', req.files);
 
+    const attachments = req.files.map(file => `/uploads/${file.filename}`);
     db.run(
       'UPDATE Defects SET description = ?, priority = ?, status = ?, assigneeId = ?, dueDate = ?, attachments = ? WHERE id = ?',
       [description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, JSON.stringify(attachments), id],
@@ -589,6 +596,43 @@ app.get('/api/export/defects', authenticateSession, (req, res) => {
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.send(buffer);
       }
+    });
+  });
+});
+
+app.get('/api/download/attachments/:defectId', authenticateSession, (req, res) => {
+  const { defectId } = req.params;
+  db.get('SELECT attachments FROM Defects WHERE id = ?', [defectId], (err, defect) => {
+    if (err) {
+      console.error('Ошибка получения вложений:', err.message);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    if (!defect) {
+      return res.status(400).json({ message: 'Дефект не найден' });
+    }
+    const attachments = JSON.parse(defect.attachments || '[]');
+    if (!attachments.length) {
+      return res.status(400).json({ message: 'Нет вложений для скачивания' });
+    }
+
+    res.setHeader('Content-Disposition', `attachment; filename="attachments_${defectId}.zip"`);
+    res.setHeader('Content-Type', 'application/zip');
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.pipe(res);
+
+    attachments.forEach(url => {
+      const filePath = path.join(uploadDir, path.basename(url)); // Используем базовое имя файла
+      console.log(`Попытка добавить файл в ZIP: ${filePath}, существует: ${fs.existsSync(filePath)}`);
+      if (fs.existsSync(filePath)) {
+        archive.file(filePath, { name: path.basename(filePath) });
+      } else {
+        console.error(`Файл не найден: ${filePath}`);
+      }
+    });
+
+    archive.finalize().catch(err => {
+      console.error('Ошибка создания ZIP:', err.message);
+      res.status(500).json({ message: 'Ошибка сервера при создании ZIP' });
     });
   });
 });

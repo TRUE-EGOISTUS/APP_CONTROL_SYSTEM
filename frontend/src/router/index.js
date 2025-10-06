@@ -4,7 +4,9 @@ import Login from '../views/Login.vue';
 import Register from '../views/Register.vue';
 import Profile from '../views/Profile.vue';
 import Projects from '../views/Projects.vue';
+import Defects from '../views/Defects.vue';
 import axios  from 'axios';
+import { meta } from '@babel/eslint-parser';
 const routes = [
   {
     path: '/',
@@ -32,6 +34,12 @@ const routes = [
     name:'Projects',
     component: Projects,
     meta: { requiresAuth: true }
+  },
+  { 
+    path:'/defects/:projectId',
+    name: 'Defects',
+    component: Defects,
+    meta: {requiresAuth:true}
   }
 ];
 

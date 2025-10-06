@@ -1,105 +1,18 @@
-```vue
 <template>
   <div class="container mt-5">
     <h2>Проекты</h2>
 
-    <!-- Форма создания проекта -->
-    <h3>Создать проект</h3>
-    <form @submit.prevent="createProject">
-      <div class="mb-3">
-        <label for="projectName" class="form-label">Название проекта</label>
-        <input
-          type="text"
-          class="form-control"
-          id="projectName"
-          v-model.trim="projectName"
-          placeholder="Введите название проекта"
-          required
-        />
-      </div>
-      <div class="mb-3">
-        <label for="projectDescription" class="form-label">Описание проекта</label>
-        <textarea
-          class="form-control"
-          id="projectDescription"
-          v-model.trim="projectDescription"
-          placeholder="Введите описание проекта (опционально)"
-        ></textarea>
-      </div>
-      <div class="mb-3">
-        <label for="projectStatus" class="form-label">Статус</label>
-        <select
-          class="form-control"
-          id="projectStatus"
-          v-model="projectStatus"
-          required
-        >
-          <option value="open">Открыт</option>
-          <option value="in progress">В процессе</option>
-          <option value="closed">Закрыт</option>
-        </select>
-      </div>
-      <button type="submit" class="btn btn-primary mb-4">Создать проект</button>
-    </form>
+    <button class="btn btn-primary mb-4" @click="testClick('add')">Добавить проект</button>
 
-    <!-- Форма редактирования проекта -->
     <div v-if="editingProject">
-      <h3>Редактировать проект #{{ editingProject.id }}</h3>
-      <form @submit.prevent="updateProject">
-        <div class="mb-3">
-          <label for="editProjectName" class="form-label">Название проекта</label>
-          <input
-            type="text"
-            class="form-control"
-            id="editProjectName"
-            v-model.trim="editProjectName"
-            placeholder="Введите название проекта"
-            required
-          />
-        </div>
-        <div class="mb-3">
-          <label for="editProjectDescription" class="form-label">Описание проекта</label>
-          <textarea
-            class="form-control"
-            id="editProjectDescription"
-            v-model.trim="editProjectDescription"
-            placeholder="Введите описание проекта (опционально)"
-          ></textarea>
-        </div>
-        <div class="mb-3">
-          <label for="editProjectStatus" class="form-label">Статус</label>
-          <select
-            class="form-control"
-            id="editProjectStatus"
-            v-model="editProjectStatus"
-            required
-          >
-            <option value="open">Открыт</option>
-            <option value="in progress">В процессе</option>
-            <option value="closed">Закрыт</option>
-          </select>
-        </div>
-        <div class="mb-3">
-          <label for="editClosedAt" class="form-label">Дата закрытия</label>
-          <input
-            type="date"
-            class="form-control"
-            id="editClosedAt"
-            v-model="editClosedAt"
-          />
-        </div>
-        <button type="submit" class="btn btn-success mb-4">Сохранить</button>
-        <button type="button" class="btn btn-secondary mb-4 ms-2" @click="cancelEditProject">Отмена</button>
-      </form>
+      <button class="btn btn-warning mb-4 ms-2" @click="testClick('edit')">Редактировать проект</button>
     </div>
 
-    <!-- Кнопки экспорта проектов -->
     <div v-if="projects.length > 0" class="mb-4">
       <button class="btn btn-info me-2" @click="exportProjects('csv')">Экспорт проектов в CSV</button>
       <button class="btn btn-info" @click="exportProjects('excel')">Экспорт проектов в Excel</button>
     </div>
 
-    <!-- Список проектов -->
     <h3>Ваши проекты</h3>
     <div v-if="projects.length > 0">
       <table class="table table-bordered">
@@ -134,94 +47,80 @@
     <div v-else>
       <p>У вас пока нет проектов.</p>
     </div>
+
+    <ModalForm
+      :title="isEditing ? 'Редактировать проект' : 'Добавить проект'"
+      :value="showModal"
+      @update:value="showModal = $event"
+      :isProject="true"
+      :users="users"
+      :onSubmit="handleSubmit"
+      :initialData="editingProject ? { ...editingProject, closedAt: editingProject.closedAt ? new Date(editingProject.closedAt).toISOString().split('T')[0] : '' } : null"
+    />
   </div>
 </template>
 
 <script>
 import axios from 'axios';
+import ModalForm from '@/components/ModalForm.vue';
 
 export default {
-  name: 'Projects',
+  components: { ModalForm },
   data() {
     return {
-      projectName: '',
-      projectDescription: '',
-      projectStatus: 'open',
-      editProjectName: '',
-      editProjectDescription: '',
-      editProjectStatus: 'open',
-      editClosedAt: '',
+      showModal: false,
+      isEditing: false,
       editingProject: null,
       projects: [],
       users: []
     };
   },
+  watch: {
+    showModal(newVal) {
+      console.log('showModal в Projects изменилось на:', newVal);
+    }
+  },
   methods: {
-    async createProject() {
+    testClick(action) {
+      console.log(`Кнопка ${action} нажата в Projects, до изменения showModal:`, this.showModal);
+      this.showModal = true;
+      this.isEditing = action === 'edit';
+      console.log(`После изменения showModal:`, this.showModal);
+    },
+    startEditProject(project) {
+      this.editingProject = { ...project };
+      this.testClick('edit');
+    },
+    async createProject(data) {
       try {
         const response = await axios.post('http://localhost:3000/api/projects', {
-          name: this.projectName,
-          description: this.projectDescription,
-          status: this.projectStatus
+          name: data.name,
+          description: data.description,
+          status: data.status
         }, { withCredentials: true });
         alert(`Проект создан: ${response.data.message}`);
-        this.projectName = '';
-        this.projectDescription = '';
-        this.projectStatus = 'open';
         this.fetchProjects();
       } catch (error) {
         alert(`Ошибка создания проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
     },
-    async fetchProjects() {
-      try {
-        const response = await axios.get('http://localhost:3000/api/projects', { withCredentials: true });
-        this.projects = response.data.projects.map(project => ({
-          ...project,
-          createdBy: response.data.users.find(user => user.id === project.userId)?.email || 'Неизвестно'
-        }));
-      } catch (error) {
-        alert(`Ошибка загрузки проектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
-        this.$router.push('/login');
-      }
-    },
-    startEditProject(project) {
-      this.editingProject = project;
-      this.editProjectName = project.name;
-      this.editProjectDescription = project.description || '';
-      this.editProjectStatus = project.status;
-      this.editClosedAt = project.closedAt ? new Date(project.closedAt).toISOString().split('T')[0] : '';
-    },
-    async updateProject() {
+    async updateProject(data) {
       try {
         const response = await axios.put(`http://localhost:3000/api/projects/${this.editingProject.id}`, {
-          name: this.editProjectName,
-          description: this.editProjectDescription,
-          status: this.editProjectStatus,
-          closedAt: this.editClosedAt ? new Date(this.editClosedAt).getTime() : null
+          name: data.name,
+          description: data.description,
+          status: data.status,
+          closedAt: data.closedAt ? new Date(data.closedAt).getTime() : null
         }, { withCredentials: true });
         alert(`Проект обновлён: ${response.data.message}`);
         this.editingProject = null;
-        this.editProjectName = '';
-        this.editProjectDescription = '';
-        this.editProjectStatus = 'open';
-        this.editClosedAt = '';
         this.fetchProjects();
       } catch (error) {
         alert(`Ошибка обновления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
     },
-    cancelEditProject() {
-      this.editingProject = null;
-      this.editProjectName = '';
-      this.editProjectDescription = '';
-      this.editProjectStatus = 'open';
-      this.editClosedAt = '';
-    },
     async deleteProject(projectId) {
-      if (!confirm('Вы уверены, что хотите удалить проект? Все связанные дефекты будут удалены.')) {
-        return;
-      }
+      if (!confirm('Вы уверены, что хотите удалить проект? Все связанные дефекты будут удалены.')) return;
       try {
         const response = await axios.delete(`http://localhost:3000/api/projects/${projectId}`, { withCredentials: true });
         alert(`Проект удалён: ${response.data.message}`);
@@ -251,6 +150,18 @@ export default {
         alert(`Ошибка экспорта проектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
     },
+    async fetchProjects() {
+      try {
+        const response = await axios.get('http://localhost:3000/api/projects', { withCredentials: true });
+        this.projects = response.data.projects.map(project => ({
+          ...project,
+          createdBy: response.data.users.find(user => user.id === project.userId)?.email || 'Неизвестно'
+        }));
+      } catch (error) {
+        alert(`Ошибка загрузки проектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        this.$router.push('/login');
+      }
+    },
     async fetchUsers() {
       try {
         const response = await axios.get('http://localhost:3000/api/users', { withCredentials: true });
@@ -258,6 +169,16 @@ export default {
       } catch (error) {
         console.error('Ошибка загрузки пользователей:', error);
       }
+    },
+    handleSubmit(data) {
+      if (this.isEditing) {
+        this.updateProject(data);
+      } else {
+        this.createProject(data);
+      }
+      this.showModal = false;
+      this.isEditing = false;
+      this.editingProject = null;
     }
   },
   mounted() {
@@ -276,4 +197,3 @@ export default {
   margin-top: 20px;
 }
 </style>
-```

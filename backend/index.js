@@ -4,8 +4,10 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const cookieParser = require('cookie-parser');
 const { v4: uuidv4 } = require('uuid');
-const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-const XLSX = require('xlsx');
+const multer = require('multer');
+const archiver = require('archiver');
+const fs = require('fs');
+const path = require('path');
 const app = express();
 const port = 3000;
 
@@ -74,7 +76,7 @@ const db = new sqlite3.Database('./database.db', (err) => {
       status TEXT NOT NULL DEFAULT 'new',
       assigneeId INTEGER,
       dueDate INTEGER,
-      attachments TEXT,
+      attachments TEXT, // JSON-массив URL
       createdAt INTEGER NOT NULL,
       FOREIGN KEY (projectId) REFERENCES Projects(id),
       FOREIGN KEY (assigneeId) REFERENCES Users(id)
@@ -91,6 +93,21 @@ const db = new sqlite3.Database('./database.db', (err) => {
 app.use(cors({ credentials: true, origin: 'http://localhost:8080' }));
 app.use(express.json());
 app.use(cookieParser());
+
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname); // Уникальное имя файла
+  }
+});
+const upload = multer({ storage });
 
 const validateInput = (email, password) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -334,8 +351,8 @@ app.delete('/api/projects/:id', authenticateSession, (req, res) => {
   });
 });
 
-app.post('/api/defects', authenticateSession, (req, res) => {
-  const { projectId, description, priority, status, assigneeId, dueDate, attachments } = req.body;
+app.post('/api/defects', authenticateSession, upload.array('attachments', 10), (req, res) => {
+  const { projectId, description, priority, status, assigneeId, dueDate } = req.body;
   if (!projectId || !description || !status || !priority) {
     return res.status(400).json({ message: 'projectId, description, status и priority обязательны' });
   }
@@ -355,9 +372,11 @@ app.post('/api/defects', authenticateSession, (req, res) => {
       return res.status(400).json({ message: 'Проект не найден или не принадлежит пользователю' });
     }
 
+    const attachments = req.files.map(file => `/uploads/${file.filename}`); // Формируем URL
+
     db.run(
       'INSERT INTO Defects (projectId, description, priority, status, assigneeId, dueDate, attachments, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [projectId, description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, attachments ? JSON.stringify(attachments) : null, Date.now()],
+      [projectId, description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, JSON.stringify(attachments), Date.now()],
       function (err) {
         if (err) {
           console.error('Ошибка создания дефекта:', err.message);
@@ -396,7 +415,7 @@ app.get('/api/defects', authenticateSession, (req, res) => {
         }
         const defects = rows.map(defect => ({
           ...defect,
-          attachments: defect.attachments ? JSON.parse(defect.attachments) : null,
+          attachments: defect.attachments ? JSON.parse(defect.attachments) : [],
           assigneeEmail: users.find(user => user.id === defect.assigneeId)?.email || null
         }));
         res.json({ defects, users });
@@ -405,9 +424,9 @@ app.get('/api/defects', authenticateSession, (req, res) => {
   });
 });
 
-app.put('/api/defects/:id', authenticateSession, (req, res) => {
+app.put('/api/defects/:id', authenticateSession, upload.array('attachments', 10), (req, res) => {
   const { id } = req.params;
-  const { description, priority, status, assigneeId, dueDate, attachments } = req.body;
+  const { description, priority, status, assigneeId, dueDate } = req.body;
   if (!description || !status || !priority) {
     return res.status(400).json({ message: 'Описание, статус и приоритет дефекта обязательны' });
   }
@@ -427,9 +446,11 @@ app.put('/api/defects/:id', authenticateSession, (req, res) => {
       return res.status(400).json({ message: 'Дефект не найден или не принадлежит пользователю' });
     }
 
+    const attachments = req.files.map(file => `/uploads/${file.filename}`); // Формируем URL
+
     db.run(
       'UPDATE Defects SET description = ?, priority = ?, status = ?, assigneeId = ?, dueDate = ?, attachments = ? WHERE id = ?',
-      [description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, attachments ? JSON.stringify(attachments) : null, id],
+      [description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, JSON.stringify(attachments), id],
       (err) => {
         if (err) {
           console.error('Ошибка обновления дефекта:', err.message);

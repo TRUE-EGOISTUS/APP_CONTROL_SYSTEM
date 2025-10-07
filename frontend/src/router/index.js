@@ -1,21 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import HomePage from '../App.vue';
 import Login from '../views/Login.vue';
 import Register from '../views/Register.vue';
-import Profile from '../views/Profile.vue';
 import Projects from '../views/Projects.vue';
 import Defects from '../views/Defects.vue';
-import axios  from 'axios';
+import Home from '../views/Home.vue';
+
 const routes = [
   {
     path: '/',
-    name: 'HomePage',
-    component: HomePage,
+    name: 'Home',
+    component: Home
   },
   {
     path: '/login',
     name: 'Login',
-    component: Login,
+    component: Login
   },
   {
     path: '/register',
@@ -23,45 +22,40 @@ const routes = [
     component: Register
   },
   {
-    path: '/profile',
-    name: 'Profile',
-    component: Profile,
-    meta: { requiresAuth: true }
-  },
-  {
-    path:'/projects',
-    name:'Projects',
+    path: '/projects',
+    name: 'Projects',
     component: Projects,
     meta: { requiresAuth: true }
   },
-  { 
-    path:'/defects/:projectId',
+  {
+    path: '/defects/:projectId',
     name: 'Defects',
     component: Defects,
-    meta: {requiresAuth:true}
+    meta: { requiresAuth: true }
   }
 ];
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
+  routes
 });
+
+// Защита маршрутов с проверкой куки
 router.beforeEach(async (to, from, next) => {
-  console.log('Router: Переход на:', to.path);
-  if (to.meta.requiresAuth) {
+  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+  if (to.meta.requiresAuth && !isAuthenticated) {
     try {
-      console.log('Router: Проверка авторизации для', to.path);
-      const response = await axios.get('http://localhost:3000/api/profile', { withCredentials: true });
-      console.log('Router: Проверка авторизации успешна:', response.data);
-      next();
+      await axios.get('http://localhost:3000/api/profile', { withCredentials: true });
+      localStorage.setItem('isAuthenticated', 'true');
     } catch (error) {
-      console.error('Router: Ошибка проверки авторизации:', error.response?.data || error.message);
-      console.log('Router: Перенаправление на /login');
-      next('/login');
+      localStorage.removeItem('isAuthenticated');
+      if (to.path !== '/login') {
+        next('/login');
+        return;
+      }
     }
-  } else {
-    console.log('Router: Доступ без авторизации к', to.path);
-    next();
   }
+  next();
 });
+
 export default router;

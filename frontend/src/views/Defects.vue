@@ -6,10 +6,6 @@
 
     <button class="btn btn-primary mb-4" @click="testClick('add')">Добавить дефект</button>
 
-    <div v-if="editingDefect">
-      <button class="btn btn-warning mb-4 ms-2" @click="testClick('edit')">Редактировать дефект</button>
-    </div>
-
     <div v-if="defects.length > 0" class="mb-4">
       <button class="btn btn-info me-2" @click="exportDefects('csv')">Экспорт дефектов в CSV</button>
       <button class="btn btn-info" @click="exportDefects('excel')">Экспорт дефектов в Excel</button>

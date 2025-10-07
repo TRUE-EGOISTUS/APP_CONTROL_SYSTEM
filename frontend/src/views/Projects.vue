@@ -4,13 +4,12 @@
 
     <button class="btn btn-primary mb-4" @click="testClick('add')">Добавить проект</button>
 
-  
     <div v-if="projects.length > 0" class="mb-4">
       <button class="btn btn-info me-2" @click="exportProjects('csv')">Экспорт проектов в CSV</button>
       <button class="btn btn-info" @click="exportProjects('excel')">Экспорт проектов в Excel</button>
     </div>
 
-    <h3>Ваши проекты</h3>
+    <h3>Список проектов</h3>
     <div v-if="projects.length > 0">
       <table class="table table-bordered">
         <thead>
@@ -18,15 +17,15 @@
             <th>Название</th>
             <th>Описание</th>
             <th>Статус</th>
-            <th>Создан</th>
-            <th>Закрыт</th>
-            <th>Создал</th>
+            <th>Дата создания</th>
+            <th>Дата закрытия</th>
+            <th>Создатель</th>
             <th>Действия</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="project in projects" :key="project.id">
-            <td>{{ project.name }}</td>
+          <tr v-for="project in projects" :key="project.id" :class="{ 'my-project': project.userId === currentUser?.id }">
+            <td>{{ project.name }} <span v-if="project.userId === currentUser?.id" class="badge bg-success ms-2">Мой</span></td>
             <td>{{ project.description || '-' }}</td>
             <td>{{ project.status }}</td>
             <td>{{ new Date(project.createdAt).toLocaleDateString() }}</td>
@@ -34,15 +33,15 @@
             <td>{{ project.createdBy || '-' }}</td>
             <td>
               <button class="btn btn-sm btn-primary me-2" @click="goToDefects(project.id)">Просмотреть дефекты</button>
-              <button class="btn btn-sm btn-warning me-2" @click="startEditProject(project)">Редактировать</button>
-              <button class="btn btn-sm btn-danger" @click="deleteProject(project.id)">Удалить</button>
+              <button class="btn btn-sm btn-warning me-2" @click="startEditProject(project)" :disabled="project.userId !== currentUser?.id">Редактировать</button>
+              <button class="btn btn-sm btn-danger" @click="deleteProject(project.id)" :disabled="project.userId !== currentUser?.id">Удалить</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
     <div v-else>
-      <p>У вас пока нет проектов.</p>
+      <p>Нет проектов.</p>
     </div>
 
     <ModalForm
@@ -69,20 +68,14 @@ export default {
       isEditing: false,
       editingProject: null,
       projects: [],
-      users: []
+      users: [],
+      currentUser: null // Добавляем для хранения текущего пользователя
     };
-  },
-  watch: {
-    showModal(newVal) {
-      console.log('showModal в Projects изменилось на:', newVal);
-    }
   },
   methods: {
     testClick(action) {
-      console.log(`Кнопка ${action} нажата в Projects, до изменения showModal:`, this.showModal);
       this.showModal = true;
       this.isEditing = action === 'edit';
-      console.log(`После изменения showModal:`, this.showModal);
     },
     startEditProject(project) {
       this.editingProject = { ...project };
@@ -117,7 +110,7 @@ export default {
       }
     },
     async deleteProject(projectId) {
-      if (!confirm('Вы уверены, что хотите удалить проект? Все связанные дефекты будут удалены.')) return;
+      if (!confirm('Вы уверены, что хотите удалить проект?')) return;
       try {
         const response = await axios.delete(`http://localhost:3000/api/projects/${projectId}`, { withCredentials: true });
         alert(`Проект удалён: ${response.data.message}`);
@@ -125,17 +118,6 @@ export default {
       } catch (error) {
         alert(`Ошибка удаления проекта: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
-    },
-    goToDefects(projectId) {
-      // Убедимся, что projectId — число
-      const id = parseInt(projectId, 10);
-      if (isNaN(id)) {
-        console.error('Invalid projectId:', projectId);
-        alert('Ошибка: некорректный ID проекта');
-        return;
-      }
-      console.log('Переход к дефектам проекта ID:', id);
-      this.$router.push({ path: `/defects/${id}` });
     },
     async exportProjects(format) {
       try {
@@ -155,18 +137,17 @@ export default {
         alert(`Ошибка экспорта проектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
     },
-    async fetchProjects() {
-      try {
-        const response = await axios.get('http://localhost:3000/api/projects', { withCredentials: true });
-        this.projects = response.data.projects.map(project => ({
-          ...project,
-          createdBy: response.data.users.find(user => user.id === project.userId)?.email || 'Неизвестно'
-        }));
-      } catch (error) {
-        alert(`Ошибка загрузки проектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
-        this.$router.push('/login');
-      }
-    },
+ async fetchProjects() {
+  try {
+    const response = await axios.get('http://localhost:3000/api/projects', { withCredentials: true });
+    console.log('Данные проектов:', response.data); // Логируем ответ сервера
+    this.projects = response.data.projects;
+  } catch (error) {
+    console.error('Ошибка загрузки проектов:', error.response); // Логируем полную ошибку
+    alert(`Ошибка загрузки проектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
+    this.$router.push('/login');
+  }
+},
     async fetchUsers() {
       try {
         const response = await axios.get('http://localhost:3000/api/users', { withCredentials: true });
@@ -174,6 +155,18 @@ export default {
       } catch (error) {
         console.error('Ошибка загрузки пользователей:', error);
       }
+    },
+    async fetchProfile() {
+      try {
+        const response = await axios.get('http://localhost:3000/api/profile', { withCredentials: true });
+        this.currentUser = response.data.user;
+      } catch (error) {
+        console.error('Ошибка загрузки профиля:', error);
+        this.$router.push('/login');
+      }
+    },
+    goToDefects(projectId) {
+      this.$router.push(`/defects/${projectId}`);
     },
     handleSubmit(data) {
       if (this.isEditing) {
@@ -187,6 +180,7 @@ export default {
     }
   },
   mounted() {
+    this.fetchProfile(); // Загружаем профиль текущего пользователя
     this.fetchProjects();
     this.fetchUsers();
   }
@@ -200,5 +194,8 @@ export default {
 }
 .table {
   margin-top: 20px;
+}
+.my-project {
+  font-weight: bold;
 }
 </style>

@@ -4,10 +4,7 @@
 
     <button class="btn btn-primary mb-4" @click="testClick('add')">Добавить проект</button>
 
-    <div v-if="editingProject">
-      <button class="btn btn-warning mb-4 ms-2" @click="testClick('edit')">Редактировать проект</button>
-    </div>
-
+  
     <div v-if="projects.length > 0" class="mb-4">
       <button class="btn btn-info me-2" @click="exportProjects('csv')">Экспорт проектов в CSV</button>
       <button class="btn btn-info" @click="exportProjects('excel')">Экспорт проектов в Excel</button>

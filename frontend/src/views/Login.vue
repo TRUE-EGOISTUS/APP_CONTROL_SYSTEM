@@ -1,6 +1,5 @@
-
 <template>
-  <div class="container mt-5">
+  <div class="container mt-5" style="max-width: 400px;">
     <h2>Вход</h2>
     <form @submit.prevent="login">
       <div class="mb-3">
@@ -40,6 +39,9 @@
       </div>
       <button type="submit" class="btn btn-primary">Войти</button>
     </form>
+    <p class="mt-3">
+      Нет аккаунта? <router-link to="/register">Зарегистрироваться</router-link>
+    </p>
   </div>
 </template>
 
@@ -86,11 +88,18 @@ export default {
         }, { withCredentials: true });
         console.log('Авторизация успешна:', response.data);
         alert(`Успешный вход: ${response.data.message}`);
-        console.log('Перенаправление на /projects');
-        this.$router.push('/projects').catch(err => {
-          console.error('Ошибка перенаправления:', err);
-          alert('Ошибка перенаправления: ' + err.message);
-        });
+        // Проверяем профиль для подтверждения авторизации
+        const profileResponse = await axios.get('http://localhost:3000/api/profile', { withCredentials: true });
+        if (profileResponse.data.user) {
+          localStorage.setItem('isAuthenticated', 'true');
+          console.log('Перенаправление на /projects');
+          this.$router.push('/projects').catch(err => {
+            console.error('Ошибка перенаправления:', err);
+            alert('Ошибка перенаправления: ' + err.message);
+          });
+        } else {
+          throw new Error('Не удалось подтвердить авторизацию');
+        }
       } catch (error) {
         console.error('Ошибка авторизации:', error.response?.data || error.message);
         alert(`Ошибка входа: ${error.response?.data?.message || 'Ошибка сервера'}`);
@@ -105,7 +114,6 @@ export default {
 
 <style scoped>
 .container {
-  max-width: 400px;
   margin: auto;
 }
 .input-group .btn {

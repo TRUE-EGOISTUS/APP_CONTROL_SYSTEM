@@ -112,33 +112,6 @@ app.use(cors({ credentials: true, origin: 'http://localhost:8080' }));
 app.use(express.json());
 app.use(cookieParser());
 
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `${uniquePrefix}-${file.originalname}`);
-  }
-});
-const upload = multer({ storage });
-
-const validateInput = (email, password) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return 'Некорректный формат email';
-  }
-  if (password.length < 6) {
-    return 'Пароль должен быть не менее 6 символов';
-  }
-  return null;
-};
-
 const authenticateSession = (req, res, next) => {
   const sessionId = req.cookies.sessionId;
   console.log('Проверка сессии:', { sessionId, cookies: req.cookies });
@@ -173,6 +146,74 @@ const authenticateSession = (req, res, next) => {
     });
   });
 };
+app.post('/api/comments', authenticateSession, (req, res) => {
+  const { defectId, text } = req.body;
+  if (!defectId || !text) {
+    return res.status(400).json({ message: 'defectId и text обязательны' });
+  }
+
+  db.get('SELECT id FROM Defects WHERE id = ?', [defectId], (err, defect) => {
+    if (err) {
+      console.error('Ошибка проверки дефекта:', err.message);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    if (!defect) {
+      return res.status(400).json({ message: 'Дефект не найден' });
+    }
+
+    db.run('INSERT INTO Comments (defectId, userId, text, createdAt) VALUES (?, ?, ?, ?)',
+      [defectId, req.user.id, text, Date.now()], (err) => {
+        if (err) {
+          console.error('Ошибка создания комментария:', err.message);
+          return res.status(500).json({ message: 'Ошибка сервера' });
+        }
+        res.json({ message: 'Комментарий добавлен' });
+      });
+  });
+});
+
+app.get('/api/comments', authenticateSession, (req, res) => {
+  const { defectId } = req.query;
+  if (!defectId) {
+    return res.status(400).json({ message: 'defectId обязателен' });
+  }
+
+  db.all('SELECT c.id, c.text, c.createdAt, u.email AS userEmail FROM Comments c JOIN Users u ON c.userId = u.id WHERE c.defectId = ?', [defectId], (err, comments) => {
+    if (err) {
+      console.error('Ошибка получения комментариев:', err.message);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    res.json({ comments });
+  });
+});
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `${uniquePrefix}-${file.originalname}`);
+  }
+});
+const upload = multer({ storage });
+
+const validateInput = (email, password) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return 'Некорректный формат email';
+  }
+  if (password.length < 6) {
+    return 'Пароль должен быть не менее 6 символов';
+  }
+  return null;
+};
+
+
 
 app.get('/', (req, res) => {
   res.json({ message: 'Сервер работает!' });
@@ -290,7 +331,7 @@ app.post('/api/projects', authenticateSession, (req, res) => {
 });
 
 app.get('/api/projects', authenticateSession, (req, res) => {
-  db.all('SELECT p.id, p.name, p.description, p.status, p.createdAt, p.closedAt, p.userId FROM Projects p WHERE p.userId = ?', [req.user.id], (err, rows) => {
+  db.all('SELECT p.id, p.name, p.description, p.status, p.createdAt, p.closedAt, p.userId FROM Projects p', (err, rows) => {
     if (err) {
       console.error('Ошибка получения проектов:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
@@ -436,8 +477,7 @@ app.get('/api/defects', authenticateSession, (req, res) => {
         }
         const defects = rows.map(defect => ({
           ...defect,
-          attachments: defect.attachments ? JSON.parse(defect.attachments) : [],
-          assigneeEmail: users.find(user => user.id === defect.assigneeId)?.email || null
+          attachments: defect.attachments ? JSON.parse(defect.attachments || '[]') : [] // Безопасный парсинг
         }));
         res.json({ defects, users });
       });

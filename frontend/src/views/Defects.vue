@@ -47,17 +47,9 @@
             </td>
             <td>{{ new Date(defect.createdAt).toLocaleDateString() }}</td>
             <td>
-              <div v-if="defect.comments && defect.comments.length > 0">
-                <div v-for="comment in defect.comments" :key="comment.id" class="comment">
-                  <strong>{{ comment.userEmail }}:</strong> {{ comment.text }}
-                  <small class="text-muted"> ({{ new Date(comment.createdAt).toLocaleString() }})</small>
-                </div>
-                <div>
-                  <input v-model="newCommentText[defect.id]" type="text" class="form-control mt-2" placeholder="Введите комментарий" />
-                  <button class="btn btn-sm btn-success mt-2" @click="addComment(defect.id)">Добавить</button>
-                </div>
-              </div>
-              <span v-else>Нет комментариев</span>
+              <button class="btn btn-info btn-sm" @click="openCommentsModal(defect.id)">
+                Посмотреть комментарии ({{ defect.comments.length }})
+              </button>
             </td>
             <td>
               <button class="btn btn-sm btn-warning me-2" @click="startEditDefect(defect)">Редактировать</button>
@@ -69,6 +61,7 @@
     </div>
     <div v-else>
       <p>У проекта пока нет дефектов.</p>
+      <p v-if="errorMessage">{{ errorMessage }}</p>
     </div>
 
     <ModalForm
@@ -80,12 +73,65 @@
       :onSubmit="handleSubmit"
       :initialData="editingDefect ? { ...editingDefect, dueDate: editingDefect.dueDate ? new Date(editingDefect.dueDate).toISOString().split('T')[0] : '', attachments: editingDefect.attachments || [] } : null"
     />
+
+    <!-- Модальное окно для комментариев -->
+    <div class="modal fade" tabindex="-1" ref="commentsModal" aria-labelledby="commentsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="commentsModalLabel">Комментарии к дефекту #{{ currentDefectId }}</h5>
+            <button type="button" class="btn-close" @click="closeCommentsModal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div v-if="currentComments && currentComments.length > 0" class="chat-container" style="max-height: 400px; overflow-y: auto;">
+              <div v-for="comment in currentComments" :key="comment.id" class="chat-message mb-3">
+                <div class="d-flex align-items-start">
+                  <div class="flex-shrink-0">
+                    <div class="avatar" :style="{ backgroundColor: getColor(comment.userEmail) }"></div>
+                  </div>
+                  <div class="flex-grow-1 ms-3">
+                    <h6 class="mb-0">{{ comment.userEmail }}</h6>
+                    <p class="text-muted small mb-1">{{ new Date(comment.createdAt).toLocaleString() }}</p>
+                    <p class="mb-0">{{ comment.text }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-muted">Нет комментариев</p>
+            <div class="comment-form mt-3">
+              <input
+                v-model="newCommentText[currentDefectId]"
+                type="text"
+                class="form-control mb-2"
+                placeholder="Напишите свой комментарий (до 500 символов)"
+                :maxlength="500"
+              />
+              <div class="d-flex gap-2">
+                <button
+                  class="btn btn-sm btn-success"
+                  :disabled="loading || !newCommentText[currentDefectId] || newCommentText[currentDefectId].trim().length === 0"
+                  @click="addComment(currentDefectId)"
+                >
+                  <span v-if="loading" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  <span v-else>Добавить</span>
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="cancelComment(currentDefectId)">Отмена</button>
+              </div>
+              <div v-if="successMessage[currentDefectId]" class="alert alert-success mt-2" role="alert">
+                {{ successMessage[currentDefectId] }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import axios from 'axios';
 import ModalForm from '@/components/ModalForm.vue';
+import { Modal } from 'bootstrap'; // Импортируем Modal напрямую
 
 export default {
   components: { ModalForm },
@@ -96,7 +142,12 @@ export default {
       editingDefect: null,
       defects: [],
       users: [],
-      newCommentText: {} // Объект для хранения текста комментария для каждого дефекта
+      newCommentText: {},
+      loading: false,
+      successMessage: {},
+      errorMessage: '',
+      currentDefectId: null,
+      currentComments: []
     };
   },
   methods: {
@@ -180,25 +231,34 @@ export default {
       }
     },
     async fetchDefects() {
+      this.errorMessage = '';
       try {
         const response = await axios.get(`http://localhost:3000/api/defects?projectId=${this.$route.params.projectId}`, { withCredentials: true });
         const defects = response.data.defects.map(defect => ({
           ...defect,
-          attachments: defect.attachments ? JSON.parse(defect.attachments) : []
+          attachments: defect.attachments ? (typeof defect.attachments === 'string' ? JSON.parse(defect.attachments) : defect.attachments) : []
         }));
 
-        // Загружаем комментарии для каждого дефекта
-        for (let defect of defects) {
-          const commentResponse = await axios.get(`http://localhost:3000/api/comments?defectId=${defect.id}`, { withCredentials: true });
-          defect.comments = commentResponse.data.comments;
-        }
+        const commentPromises = defects.map(defect =>
+          axios.get(`http://localhost:3000/api/comments?defectId=${defect.id}`, { withCredentials: true })
+            .then(res => ({ id: defect.id, comments: res.data.comments }))
+            .catch(err => {
+              console.error(`Ошибка загрузки комментариев для дефекта ${defect.id}:`, err);
+              return { id: defect.id, comments: [] };
+            })
+        );
+        const commentResults = await Promise.all(commentPromises);
+        const commentMap = Object.fromEntries(commentResults.map(r => [r.id, r.comments]));
 
         this.defects = defects.map(defect => ({
           ...defect,
-          assigneeEmail: response.data.users.find(user => user.id === defect.assigneeId)?.email || null
+          assigneeEmail: response.data.users.find(user => user.id === defect.assigneeId)?.email || null,
+          comments: commentMap[defect.id] || []
         }));
       } catch (error) {
-        alert(`Ошибка загрузки дефектов: ${error.response?.data?.message || 'Ошибка сервера'}`);
+        console.error('Ошибка загрузки дефектов:', error);
+        this.errorMessage = `Ошибка загрузки дефектов: ${error.response?.data?.message || 'Проверь подключение к серверу'}`;
+        this.defects = [];
       }
     },
     async fetchUsers() {
@@ -227,22 +287,60 @@ export default {
         alert(`Ошибка скачивания: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
     },
+    openCommentsModal(defectId) {
+      this.currentDefectId = defectId;
+      this.currentComments = this.defects.find(d => d.id === defectId)?.comments || [];
+      const modal = new Modal(this.$refs.commentsModal); // Используем импортированный Modal
+      modal.show();
+    },
+    closeCommentsModal() {
+      const modal = Modal.getInstance(this.$refs.commentsModal);
+      if (modal) modal.hide();
+    },
+    getColor(email) {
+      let hash = 0;
+      for (let i = 0; i < email.length; i++) {
+        hash = email.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const color = `hsl(${hash % 360}, 70%, 80%)`;
+      return color;
+    },
     async addComment(defectId) {
       const text = this.newCommentText[defectId];
-      if (!text) {
-        alert('Введите текст комментария');
+      if (!text || text.trim().length === 0) {
+        alert('Пожалуйста, введите текст комментария');
         return;
       }
+      if (text.length > 500) {
+        alert('Комментарий не должен превышать 500 символов');
+        return;
+      }
+      this.loading = true;
       try {
         await axios.post('http://localhost:3000/api/comments', {
           defectId,
           text
         }, { withCredentials: true });
-        this.newCommentText[defectId] = ''; // Очищаем поле
-        this.fetchDefects(); // Перезагружаем дефекты с комментариями
+        this.newCommentText[defectId] = '';
+        const commentResponse = await axios.get(`http://localhost:3000/api/comments?defectId=${defectId}`, { withCredentials: true });
+        const updatedDefectIndex = this.defects.findIndex(d => d.id === defectId);
+        if (updatedDefectIndex !== -1) {
+          this.defects[updatedDefectIndex].comments = commentResponse.data.comments;
+        }
+        this.currentComments = commentResponse.data.comments;
+        this.successMessage[defectId] = 'Комментарий успешно добавлен!';
+        setTimeout(() => {
+          this.successMessage[defectId] = '';
+        }, 2000);
       } catch (error) {
         alert(`Ошибка добавления комментария: ${error.response?.data?.message || 'Ошибка сервера'}`);
+      } finally {
+        this.loading = false;
       }
+    },
+    cancelComment(defectId) {
+      this.newCommentText[defectId] = '';
+      this.successMessage[defectId] = '';
     },
     handleSubmit(data) {
       if (this.isEditing) {
@@ -270,11 +368,24 @@ export default {
 .table {
   margin-top: 20px;
 }
-.comment {
-  margin-bottom: 10px;
-  padding: 5px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+.chat-container {
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 5px;
+}
+.chat-message {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 .attachments {
   display: flex;

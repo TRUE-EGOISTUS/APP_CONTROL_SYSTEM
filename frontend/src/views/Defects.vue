@@ -3,7 +3,6 @@
     <h2>Дефекты проекта #{{ $route.params.projectId }}</h2>
 
     <button class="btn btn-secondary mb-4" @click="goBack">Вернуться к проектам</button>
-
     <button class="btn btn-primary mb-4" @click="testClick('add')">Добавить дефект</button>
 
     <div v-if="defects.length > 0" class="mb-4">
@@ -23,6 +22,7 @@
             <th>Срок</th>
             <th>Вложения</th>
             <th>Дата создания</th>
+            <th>Комментарии</th>
             <th>Действия</th>
           </tr>
         </thead>
@@ -46,6 +46,19 @@
               <span v-else>-</span>
             </td>
             <td>{{ new Date(defect.createdAt).toLocaleDateString() }}</td>
+            <td>
+              <div v-if="defect.comments && defect.comments.length > 0">
+                <div v-for="comment in defect.comments" :key="comment.id" class="comment">
+                  <strong>{{ comment.userEmail }}:</strong> {{ comment.text }}
+                  <small class="text-muted"> ({{ new Date(comment.createdAt).toLocaleString() }})</small>
+                </div>
+                <div>
+                  <input v-model="newCommentText[defect.id]" type="text" class="form-control mt-2" placeholder="Введите комментарий" />
+                  <button class="btn btn-sm btn-success mt-2" @click="addComment(defect.id)">Добавить</button>
+                </div>
+              </div>
+              <span v-else>Нет комментариев</span>
+            </td>
             <td>
               <button class="btn btn-sm btn-warning me-2" @click="startEditDefect(defect)">Редактировать</button>
               <button class="btn btn-sm btn-danger" @click="deleteDefect(defect.id)">Удалить</button>
@@ -82,20 +95,14 @@ export default {
       isEditing: false,
       editingDefect: null,
       defects: [],
-      users: []
+      users: [],
+      newCommentText: {} // Объект для хранения текста комментария для каждого дефекта
     };
-  },
-  watch: {
-    showModal(newVal) {
-      console.log('showModal в Defects изменилось на:', newVal);
-    }
   },
   methods: {
     testClick(action) {
-      console.log(`Кнопка ${action} нажата в Defects, до изменения showModal:`, this.showModal);
       this.showModal = true;
       this.isEditing = action === 'edit';
-      console.log(`После изменения showModal:`, this.showModal);
     },
     goBack() {
       this.$router.push('/projects');
@@ -175,7 +182,18 @@ export default {
     async fetchDefects() {
       try {
         const response = await axios.get(`http://localhost:3000/api/defects?projectId=${this.$route.params.projectId}`, { withCredentials: true });
-        this.defects = response.data.defects.map(defect => ({
+        const defects = response.data.defects.map(defect => ({
+          ...defect,
+          attachments: defect.attachments ? JSON.parse(defect.attachments) : []
+        }));
+
+        // Загружаем комментарии для каждого дефекта
+        for (let defect of defects) {
+          const commentResponse = await axios.get(`http://localhost:3000/api/comments?defectId=${defect.id}`, { withCredentials: true });
+          defect.comments = commentResponse.data.comments;
+        }
+
+        this.defects = defects.map(defect => ({
           ...defect,
           assigneeEmail: response.data.users.find(user => user.id === defect.assigneeId)?.email || null
         }));
@@ -209,6 +227,23 @@ export default {
         alert(`Ошибка скачивания: ${error.response?.data?.message || 'Ошибка сервера'}`);
       }
     },
+    async addComment(defectId) {
+      const text = this.newCommentText[defectId];
+      if (!text) {
+        alert('Введите текст комментария');
+        return;
+      }
+      try {
+        await axios.post('http://localhost:3000/api/comments', {
+          defectId,
+          text
+        }, { withCredentials: true });
+        this.newCommentText[defectId] = ''; // Очищаем поле
+        this.fetchDefects(); // Перезагружаем дефекты с комментариями
+      } catch (error) {
+        alert(`Ошибка добавления комментария: ${error.response?.data?.message || 'Ошибка сервера'}`);
+      }
+    },
     handleSubmit(data) {
       if (this.isEditing) {
         this.updateDefect(data);
@@ -234,6 +269,12 @@ export default {
 }
 .table {
   margin-top: 20px;
+}
+.comment {
+  margin-bottom: 10px;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }
 .attachments {
   display: flex;

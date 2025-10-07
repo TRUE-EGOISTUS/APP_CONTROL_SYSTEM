@@ -8,9 +8,6 @@ const multer = require('multer');
 const archiver = require('archiver');
 const fs = require('fs');
 const path = require('path');
-const XLSX = require('xlsx');
-const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-
 const app = express();
 const port = 3000;
 
@@ -91,6 +88,24 @@ const db = new sqlite3.Database('./database.db', (err) => {
       console.log('Таблица Defects создана или уже существует.');
     }
   });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS Comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      defectId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      FOREIGN KEY (defectId) REFERENCES Defects(id),
+      FOREIGN KEY (userId) REFERENCES Users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error('Ошибка создания таблицы Comments:', err.message);
+    } else {
+      console.log('Таблица Comments создана или уже существует.');
+    }
+  });
 });
 
 app.use(cors({ credentials: true, origin: 'http://localhost:8080' }));
@@ -149,96 +164,148 @@ const authenticateSession = (req, res, next) => {
         return res.status(500).json({ message: 'Ошибка сервера' });
       }
       if (!user) {
+        console.log('Пользователь не найден:', { userId: session.userId });
         return res.status(401).json({ message: 'Пользователь не найден' });
       }
-      req.user = user; // Сохраняем пользователя в запросе
-      console.log('Пользователь авторизован:', req.user);
+      console.log('Пользователь аутентифицирован:', user);
+      req.user = user;
       next();
     });
   });
 };
 
+app.get('/', (req, res) => {
+  res.json({ message: 'Сервер работает!' });
+});
+
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
-  const error = validateInput(email, password);
-  if (error) {
-    return res.status(400).json({ message: error });
+
+  const validationError = validateInput(email, password);
+  if (validationError) {
+    return res.status(400).json({ message: validationError });
   }
 
-  db.get('SELECT * FROM Users WHERE email = ?', [email], (err, user) => {
+  db.get('SELECT * FROM Users WHERE email = ?', [email], (err, row) => {
     if (err) {
-      console.error('Ошибка проверки пользователя:', err.message);
+      console.error('Ошибка запроса к базе данных:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
-    if (!user) {
-      return res.status(401).json({ message: 'Пользователь не найден' });
+    if (!row) {
+      return res.status(401).json({ message: 'Неверный email или пароль' });
     }
 
-    bcrypt.compare(password, user.password, (err, result) => {
+    bcrypt.compare(password, row.password, (err, isMatch) => {
       if (err) {
-        console.error('Ошибка сравнения пароля:', err.message);
+        console.error('Ошибка проверки пароля:', err.message);
         return res.status(500).json({ message: 'Ошибка сервера' });
       }
-      if (!result) {
-        return res.status(401).json({ message: 'Неверный пароль' });
+      if (isMatch) {
+        const sessionId = uuidv4();
+        const expires = Date.now() + 3600 * 1000;
+        db.run('INSERT INTO Sessions (sessionId, userId, expires) VALUES (?, ?, ?)', [sessionId, row.id, expires], (err) => {
+          if (err) {
+            console.error('Ошибка создания сессии:', err.message);
+            return res.status(500).json({ message: 'Ошибка сервера' });
+          }
+          console.log('Сессия создана:', { sessionId, userId: row.id, expires });
+          res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            maxAge: 3600 * 1000
+          });
+          res.json({ message: 'Успешный вход', userId: row.id });
+        });
+      } else {
+        res.status(401).json({ message: 'Неверный email или пароль' });
       }
-
-      const sessionId = uuidv4();
-      const expires = Date.now() + 24 * 60 * 60 * 1000; // 24 часа
-      db.run('INSERT INTO Sessions (sessionId, userId, expires) VALUES (?, ?, ?)', [sessionId, user.id, expires], (err) => {
-        if (err) {
-          console.error('Ошибка создания сессии:', err.message);
-          return res.status(500).json({ message: 'Ошибка сервера' });
-        }
-        res.cookie('sessionId', sessionId, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
-        res.json({ message: 'Успешный вход' });
-      });
     });
   });
 });
 
 app.post('/api/register', (req, res) => {
   const { email, password } = req.body;
-  const error = validateInput(email, password);
-  if (error) {
-    return res.status(400).json({ message: error });
+
+  const validationError = validateInput(email, password);
+  if (validationError) {
+    return res.status(400).json({ message: validationError });
   }
 
-  bcrypt.hash(password, 10, (err, hash) => {
+  bcrypt.hash(password, 10, (err, hashedPassword) => {
     if (err) {
       console.error('Ошибка хеширования пароля:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
 
-    db.run('INSERT INTO Users (email, password, createdAt) VALUES (?, ?, ?)', [email, hash, Date.now()], (err) => {
+    db.run('INSERT INTO Users (email, password, createdAt) VALUES (?, ?, ?)', [email, hashedPassword, Date.now()], function (err) {
       if (err) {
-        if (err.code === 'SQLITE_CONSTRAINT') {
-          return res.status(400).json({ message: 'Пользователь с таким email уже существует' });
-        }
         console.error('Ошибка регистрации:', err.message);
-        return res.status(500).json({ message: 'Ошибка сервера' });
+        return res.status(400).json({ message: 'Email уже существует или некорректные данные' });
       }
-      res.json({ message: 'Регистрация успешна' });
+      res.json({ message: 'Успешная регистрация', userId: this.lastID });
     });
   });
 });
 
 app.get('/api/profile', authenticateSession, (req, res) => {
-  res.json({ message: 'Профиль доступен', user: req.user });
+  console.log('Доступ к профилю:', req.user);
+  res.json({ message: 'Доступ к профилю разрешён', user: req.user });
+});
+
+app.post('/api/logout', (req, res) => {
+  const sessionId = req.cookies.sessionId;
+  if (sessionId) {
+    db.run('DELETE FROM Sessions WHERE sessionId = ?', [sessionId], (err) => {
+      if (err) {
+        console.error('Ошибка удаления сессии:', err.message);
+        return res.status(500).json({ message: 'Ошибка сервера' });
+      }
+    });
+  }
+  res.clearCookie('sessionId');
+  res.json({ message: 'Выход выполнен' });
 });
 
 app.post('/api/projects', authenticateSession, (req, res) => {
   const { name, description, status } = req.body;
   if (!name || !status) {
-    return res.status(400).json({ message: 'Не указаны обязательные поля' });
+    return res.status(400).json({ message: 'Название и статус проекта обязательны' });
+  }
+  if (!['open', 'in progress', 'closed'].includes(status)) {
+    return res.status(400).json({ message: 'Недопустимый статус проекта' });
   }
 
-  db.run('INSERT INTO Projects (name, description, status, createdAt, userId) VALUES (?, ?, ?, ?, ?)', [name, description, status, Date.now(), req.user.id], (err) => {
+  db.run(
+    'INSERT INTO Projects (name, description, status, createdAt, userId) VALUES (?, ?, ?, ?, ?)',
+    [name, description || '', status, Date.now(), req.user.id],
+    function (err) {
+      if (err) {
+        console.error('Ошибка создания проекта:', err.message);
+        return res.status(500).json({ message: 'Ошибка сервера' });
+      }
+      res.json({ message: 'Проект создан', projectId: this.lastID });
+    }
+  );
+});
+
+app.get('/api/projects', authenticateSession, (req, res) => {
+  db.all('SELECT p.id, p.name, p.description, p.status, p.createdAt, p.closedAt, p.userId FROM Projects p WHERE p.userId = ?', [req.user.id], (err, rows) => {
     if (err) {
-      console.error('Ошибка создания проекта:', err.message);
+      console.error('Ошибка получения проектов:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
-    res.json({ message: 'Проект создан' });
+    db.all('SELECT id, email FROM Users', (err, users) => {
+      if (err) {
+        console.error('Ошибка получения пользователей:', err.message);
+        return res.status(500).json({ message: 'Ошибка сервера' });
+      }
+      const projects = rows.map(project => ({
+        ...project,
+        createdBy: users.find(user => user.id === project.userId)?.email || 'Неизвестно'
+      }));
+      res.json({ projects, users });
+    });
   });
 });
 
@@ -246,43 +313,73 @@ app.put('/api/projects/:id', authenticateSession, (req, res) => {
   const { id } = req.params;
   const { name, description, status, closedAt } = req.body;
   if (!name || !status) {
-    return res.status(400).json({ message: 'Не указаны обязательные поля' });
+    return res.status(400).json({ message: 'Название и статус проекта обязательны' });
+  }
+  if (!['open', 'in progress', 'closed'].includes(status)) {
+    return res.status(400).json({ message: 'Недопустимый статус проекта' });
   }
 
-  db.run('UPDATE Projects SET name = ?, description = ?, status = ?, closedAt = ? WHERE id = ? AND userId = ?', [name, description, status, closedAt ? new Date(closedAt).getTime() : null, id, req.user.id], (err) => {
+  db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [id, req.user.id], (err, project) => {
     if (err) {
-      console.error('Ошибка обновления проекта:', err.message);
+      console.error('Ошибка проверки проекта:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
-    res.json({ message: 'Проект обновлён' });
+    if (!project) {
+      return res.status(400).json({ message: 'Проект не найден или не принадлежит пользователю' });
+    }
+
+    db.run(
+      'UPDATE Projects SET name = ?, description = ?, status = ?, closedAt = ? WHERE id = ?',
+      [name, description || '', status, closedAt ? parseInt(closedAt) : null, id],
+      (err) => {
+        if (err) {
+          console.error('Ошибка обновления проекта:', err.message);
+          return res.status(500).json({ message: 'Ошибка сервера' });
+        }
+        res.json({ message: 'Проект обновлён' });
+      }
+    );
   });
 });
 
 app.delete('/api/projects/:id', authenticateSession, (req, res) => {
   const { id } = req.params;
-  db.run('DELETE FROM Projects WHERE id = ? AND userId = ?', [id, req.user.id], (err) => {
+
+  db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [id, req.user.id], (err, project) => {
     if (err) {
-      console.error('Ошибка удаления проекта:', err.message);
+      console.error('Ошибка проверки проекта:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
-    res.json({ message: 'Проект удалён' });
+    if (!project) {
+      return res.status(400).json({ message: 'Проект не найден или не принадлежит пользователю' });
+    }
+
+    db.run('DELETE FROM Defects WHERE projectId = ?', [id], (err) => {
+      if (err) {
+        console.error('Ошибка удаления дефектов:', err.message);
+        return res.status(500).json({ message: 'Ошибка сервера' });
+      }
+      db.run('DELETE FROM Projects WHERE id = ?', [id], (err) => {
+        if (err) {
+          console.error('Ошибка удаления проекта:', err.message);
+          return res.status(500).json({ message: 'Ошибка сервера' });
+        }
+        res.json({ message: 'Проект удалён' });
+      });
+    });
   });
 });
 
-app.get('/api/projects', authenticateSession, (req, res) => {
-  db.all('SELECT p.id, p.name, p.description, p.status, p.createdAt, p.closedAt, u.email as createdBy FROM Projects p JOIN Users u ON p.userId = u.id WHERE p.userId = ?', [req.user.id], (err, rows) => {
-    if (err) {
-      console.error('Ошибка получения проектов:', err.message);
-      return res.status(500).json({ message: 'Ошибка сервера' });
-    }
-    res.json({ projects: rows });
-  });
-});
-
-app.post('/api/defects', authenticateSession, upload.array('attachments'), (req, res) => {
+app.post('/api/defects', authenticateSession, upload.array('attachments', 10), (req, res) => {
   const { projectId, description, priority, status, assigneeId, dueDate } = req.body;
-  if (!projectId || !description || !priority || !status) {
-    return res.status(400).json({ message: 'Не указаны обязательные поля' });
+  if (!projectId || !description || !status || !priority) {
+    return res.status(400).json({ message: 'projectId, description, status и priority обязательны' });
+  }
+  if (!['new', 'in_work', 'on_review', 'closed', 'canceled'].includes(status)) {
+    return res.status(400).json({ message: 'Недопустимый статус дефекта' });
+  }
+  if (!['low', 'medium', 'high'].includes(priority)) {
+    return res.status(400).json({ message: 'Недопустимый приоритет дефекта' });
   }
 
   db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [projectId, req.user.id], (err, project) => {
@@ -294,86 +391,21 @@ app.post('/api/defects', authenticateSession, upload.array('attachments'), (req,
       return res.status(400).json({ message: 'Проект не найден или не принадлежит пользователю' });
     }
 
+    // Логируем загруженные файлы для отладки
+    console.log('Загруженные файлы:', req.files);
+
     const attachments = req.files.map(file => `/uploads/${file.filename}`);
-    db.run('INSERT INTO Defects (projectId, description, priority, status, assigneeId, dueDate, attachments, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [projectId, description, priority, status, assigneeId || null, dueDate ? new Date(dueDate).getTime() : null, JSON.stringify(attachments), Date.now()], (err) => {
-      if (err) {
-        console.error('Ошибка создания дефекта:', err.message);
-        return res.status(500).json({ message: 'Ошибка сервера' });
-      }
-      res.json({ message: 'Дефект создан' });
-    });
-  });
-});
-
-app.put('/api/defects/:id', authenticateSession, upload.array('attachments'), (req, res) => {
-  const { id } = req.params;
-  const { description, priority, status, assigneeId, dueDate } = req.body;
-  if (!description || !priority || !status) {
-    return res.status(400).json({ message: 'Не указаны обязательные поля' });
-  }
-
-  db.get('SELECT projectId FROM Defects WHERE id = ?', [id], (err, defect) => {
-    if (err) {
-      console.error('Ошибка проверки дефекта:', err.message);
-      return res.status(500).json({ message: 'Ошибка сервера' });
-    }
-    if (!defect) {
-      return res.status(400).json({ message: 'Дефект не найден' });
-    }
-
-    db.get('SELECT userId FROM Projects WHERE id = ?', [defect.projectId], (err, project) => {
-      if (err) {
-        console.error('Ошибка проверки проекта:', err.message);
-        return res.status(500).json({ message: 'Ошибка сервера' });
-      }
-      if (!project || project.userId !== req.user.id) {
-        return res.status(403).json({ message: 'Нет прав на редактирование дефекта' });
-      }
-
-      const attachments = req.files.map(file => `/uploads/${file.filename}`);
-      db.get('SELECT attachments FROM Defects WHERE id = ?', [id], (err, oldDefect) => {
-        const oldAttachments = JSON.parse(oldDefect.attachments || '[]');
-        const newAttachments = [...oldAttachments, ...attachments];
-        db.run('UPDATE Defects SET description = ?, priority = ?, status = ?, assigneeId = ?, dueDate = ?, attachments = ? WHERE id = ?', [description, priority, status, assigneeId || null, dueDate ? new Date(dueDate).getTime() : null, JSON.stringify(newAttachments), id], (err) => {
-          if (err) {
-            console.error('Ошибка обновления дефекта:', err.message);
-            return res.status(500).json({ message: 'Ошибка сервера' });
-          }
-          res.json({ message: 'Дефект обновлён' });
-        });
-      });
-    });
-  });
-});
-
-app.delete('/api/defects/:id', authenticateSession, (req, res) => {
-  const { id } = req.params;
-  db.get('SELECT projectId FROM Defects WHERE id = ?', [id], (err, defect) => {
-    if (err) {
-      console.error('Ошибка проверки дефекта:', err.message);
-      return res.status(500).json({ message: 'Ошибка сервера' });
-    }
-    if (!defect) {
-      return res.status(400).json({ message: 'Дефект не найден' });
-    }
-
-    db.get('SELECT userId FROM Projects WHERE id = ?', [defect.projectId], (err, project) => {
-      if (err) {
-        console.error('Ошибка проверки проекта:', err.message);
-        return res.status(500).json({ message: 'Ошибка сервера' });
-      }
-      if (!project || project.userId !== req.user.id) {
-        return res.status(403).json({ message: 'Нет прав на удаление дефекта' });
-      }
-
-      db.run('DELETE FROM Defects WHERE id = ?', [id], (err) => {
+    db.run(
+      'INSERT INTO Defects (projectId, description, priority, status, assigneeId, dueDate, attachments, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [projectId, description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, JSON.stringify(attachments), Date.now()],
+      function (err) {
         if (err) {
-          console.error('Ошибка удаления дефекта:', err.message);
+          console.error('Ошибка создания дефекта:', err.message);
           return res.status(500).json({ message: 'Ошибка сервера' });
         }
-        res.json({ message: 'Дефект удалён' });
-      });
-    });
+        res.json({ message: 'Дефект создан', defectId: this.lastID });
+      }
+    );
   });
 });
 
@@ -383,43 +415,110 @@ app.get('/api/defects', authenticateSession, (req, res) => {
     return res.status(400).json({ message: 'Не указан projectId' });
   }
 
-  db.get('SELECT userId FROM Projects WHERE id = ?', [projectId], (err, project) => {
+  db.get('SELECT id FROM Projects WHERE id = ? AND userId = ?', [projectId, req.user.id], (err, project) => {
     if (err) {
       console.error('Ошибка проверки проекта:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
-    if (!project || project.userId !== req.user.id) {
-      return res.status(403).json({ message: 'Нет прав на просмотр дефектов' });
+    if (!project) {
+      return res.status(400).json({ message: 'Проект не найден или не принадлежит пользователю' });
     }
 
-    db.all('SELECT d.id, d.description, d.priority, d.status, d.assigneeId, d.dueDate, d.attachments, d.createdAt, u.email as assigneeEmail FROM Defects d LEFT JOIN Users u ON d.assigneeId = u.id WHERE d.projectId = ?', [projectId], (err, defects) => {
+    db.all('SELECT d.id, d.projectId, d.description, d.priority, d.status, d.assigneeId, d.dueDate, d.attachments, d.createdAt FROM Defects d WHERE d.projectId = ?', [projectId], (err, rows) => {
       if (err) {
         console.error('Ошибка получения дефектов:', err.message);
         return res.status(500).json({ message: 'Ошибка сервера' });
       }
-      db.all('SELECT id, email FROM Users WHERE id IN (SELECT DISTINCT assigneeId FROM Defects WHERE projectId = ? AND assigneeId IS NOT NULL)', [projectId], (err, users) => {
+      db.all('SELECT id, email FROM Users', (err, users) => {
         if (err) {
           console.error('Ошибка получения пользователей:', err.message);
           return res.status(500).json({ message: 'Ошибка сервера' });
         }
+        const defects = rows.map(defect => ({
+          ...defect,
+          attachments: defect.attachments ? JSON.parse(defect.attachments) : [],
+          assigneeEmail: users.find(user => user.id === defect.assigneeId)?.email || null
+        }));
         res.json({ defects, users });
       });
     });
   });
 });
 
+app.put('/api/defects/:id', authenticateSession, upload.array('attachments', 10), (req, res) => {
+  const { id } = req.params;
+  const { description, priority, status, assigneeId, dueDate } = req.body;
+  if (!description || !status || !priority) {
+    return res.status(400).json({ message: 'Описание, статус и приоритет дефекта обязательны' });
+  }
+  if (!['new', 'in_work', 'on_review', 'closed', 'canceled'].includes(status)) {
+    return res.status(400).json({ message: 'Недопустимый статус дефекта' });
+  }
+  if (!['low', 'medium', 'high'].includes(priority)) {
+    return res.status(400).json({ message: 'Недопустимый приоритет дефекта' });
+  }
+
+  db.get('SELECT d.id, d.projectId FROM Defects d JOIN Projects p ON d.projectId = p.id WHERE d.id = ? AND p.userId = ?', [id, req.user.id], (err, defect) => {
+    if (err) {
+      console.error('Ошибка проверки дефекта:', err.message);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    if (!defect) {
+      return res.status(400).json({ message: 'Дефект не найден или не принадлежит пользователю' });
+    }
+
+    // Логируем загруженные файлы для отладки
+    console.log('Загруженные файлы при обновлении:', req.files);
+
+    const attachments = req.files.map(file => `/uploads/${file.filename}`);
+    db.run(
+      'UPDATE Defects SET description = ?, priority = ?, status = ?, assigneeId = ?, dueDate = ?, attachments = ? WHERE id = ?',
+      [description, priority, status, assigneeId || null, dueDate ? parseInt(dueDate) : null, JSON.stringify(attachments), id],
+      (err) => {
+        if (err) {
+          console.error('Ошибка обновления дефекта:', err.message);
+          return res.status(500).json({ message: 'Ошибка сервера' });
+        }
+        res.json({ message: 'Дефект обновлён' });
+      }
+    );
+  });
+});
+
+app.delete('/api/defects/:id', authenticateSession, (req, res) => {
+  const { id } = req.params;
+
+  db.get('SELECT d.id, d.projectId FROM Defects d JOIN Projects p ON d.projectId = p.id WHERE d.id = ? AND p.userId = ?', [id, req.user.id], (err, defect) => {
+    if (err) {
+      console.error('Ошибка проверки дефекта:', err.message);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    if (!defect) {
+      return res.status(400).json({ message: 'Дефект не найден или не принадлежит пользователю' });
+    }
+
+    db.run('DELETE FROM Defects WHERE id = ?', [id], (err) => {
+      if (err) {
+        console.error('Ошибка удаления дефекта:', err.message);
+        return res.status(500).json({ message: 'Ошибка сервера' });
+      }
+      res.json({ message: 'Дефект удалён' });
+    });
+  });
+});
+
 app.get('/api/users', authenticateSession, (req, res) => {
-  db.all('SELECT id, email FROM Users WHERE id != ?', [req.user.id], (err, users) => {
+  db.all('SELECT id, email FROM Users', (err, rows) => {
     if (err) {
       console.error('Ошибка получения пользователей:', err.message);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
-    res.json({ users });
+    res.json({ users: rows });
   });
 });
 
-app.post('/api/export/projects', authenticateSession, (req, res) => {
-  const format = req.body.format || 'csv';
+app.get('/api/export/projects', authenticateSession, (req, res) => {
+  const format = req.query.format;
   if (!['csv', 'excel'].includes(format)) {
     return res.status(400).json({ message: 'Недопустимый формат экспорта' });
   }
@@ -538,7 +637,7 @@ app.get('/api/download/attachments/:defectId', authenticateSession, (req, res) =
     archive.pipe(res);
 
     attachments.forEach(url => {
-      const filePath = path.join(uploadDir, path.basename(url));
+      const filePath = path.join(uploadDir, path.basename(url)); // Используем базовое имя файла
       console.log(`Попытка добавить файл в ZIP: ${filePath}, существует: ${fs.existsSync(filePath)}`);
       if (fs.existsSync(filePath)) {
         archive.file(filePath, { name: path.basename(filePath) });
